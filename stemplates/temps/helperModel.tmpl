@@ -1,0 +1,58 @@
+package models
+
+import (
+	"math/rand"
+	"crypto/sha512"
+	"encoding/hex"
+
+	"{{.ProjectName}}/configs"
+)
+
+const (
+	charsetLen = 62
+	charset    = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+)
+
+// Helper for pagination
+type Pagination struct {
+	Page   int
+	Size   int
+}
+
+
+// Combine password and salt then hash them using the SHA-512
+func HashFunc(password string) string {
+
+	// var salt []byte
+	// get salt from env variable
+	salt := []byte(configs.AppConfig.Get("SECRETE_SALT"))
+
+	// Convert password string to byte slice
+	var pwdByte = []byte(password)
+
+	// Create sha-512 hasher
+	var sha512 = sha512.New()
+
+	pwdByte = append(pwdByte, salt...)
+
+	sha512.Write(pwdByte)
+
+	// Get the SHA-512 hashed password
+	var hashedPassword = sha512.Sum(nil)
+
+	// Convert the hashed to hex string
+	var hashedPasswordHex = hex.EncodeToString(hashedPassword)
+	return hashedPasswordHex
+}
+
+
+func GenerateRandomString(length int) (string, error) {
+	result := make([]byte, length)
+
+	for i := 0; i < length; i++ {
+		index := rand.Intn(charsetLen)
+		result[i] = charset[index]
+	}
+
+	return string(result), nil
+}

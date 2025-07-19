@@ -1,0 +1,424 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"time"
+	"strconv"
+
+	"{{ .ProjectName }}/{{ $.AppName }}/models"
+	 "gorm.io/gorm"
+	"github.com/jinzhu/copier"
+)
+
+
+
+var Handler{{.Name}}Service {{.Name}}Service
+
+// UserService wraps MongoDB logic for users
+type {{.Name}}Service struct {
+	DB *gorm.DB
+}
+
+
+// Constructor For Client
+func New{{.Name}}Service(db *gorm.DB) (*{{.Name}}Service, error) {
+
+	Handler{{.Name}}Service =  {{.Name}}Service{
+		DB:  db,
+	}
+	return &Handler{{.Name}}Service, nil
+}
+
+// Utility function for transactions
+func (s *{{.Name}}Service) withTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
+    // Start the transaction with context (e.g., tracing)
+    tx := s.DB.WithContext(ctx).Begin()
+    if tx.Error != nil {
+        return tx.Error
+    }
+
+    // Ensure rollback on panic
+    defer func() {
+        if r := recover(); r != nil {
+            tx.Rollback()
+        }
+    }()
+
+    // Execute transactional logic
+    if err := fn(tx); err != nil {
+        tx.Rollback()
+        return err
+    }
+
+    // Commit if no errors
+    return tx.Commit().Error
+}
+
+
+// Create inserts a new {{.LowerName}}
+func (s *{{.Name}}Service) Create(ctx context.Context, posted_{{.LowerName}} *models.{{.Name}}Post) (*models.{{.Name}}Get, error) {
+	var created{{.Name}} = new(models.{{.Name}}Get)
+
+	err := s.withTransaction(ctx, func(tx *gorm.DB) error {
+			{{- range .Fields}} {{- if .Post}}
+				{{- if eq .Name "Password" }}
+			hashedPassword := models.HashFunc(posted_user.Password)
+					{{- end }}
+				{{- end }}
+			{{- end }}
+
+			{{.LowerName}} := models.{{.Name}}{
+				{{- range .Fields}} {{- if .Post}}
+				{{- if eq .Name "Password" }}
+					{{.Name}}:  hashedPassword,
+				{{- else if eq .Name "ID" }}
+					{{.Name}}:  primitive.NewObjectID(),
+				{{- else }}
+					{{.Name}}:  posted_{{.ModelName | toLowerCaseName }}.{{.Name}},
+				{{- end	}}
+			{{- end}}
+			{{- end}}
+					CreatedAt:   time.Now(),
+			}
+
+
+			err := tx.Create(&{{.LowerName}}).Error
+			if err != nil {
+				return fmt.Errorf("{{.LowerName}} creatoin failed: %w", err)
+			}
+
+            // copier.Copy(created{{.Name}} , {{.LowerName}})
+      		err = copier.CopyWithOption(created{{.Name}}, {{.LowerName}}, copier.Option{DeepCopy: true})
+      		if err != nil {
+     			return err
+      		}
+
+			return nil
+		})
+
+
+		return created{{.Name}}, err
+}
+
+// GetOne fetches a {{.LowerName}} by ID
+func (s *{{.Name}}Service) GetOne(ctx context.Context, id string) (*models.{{.Name}}Get, error) {
+    // checking Cache if it exists
+   	cacheKey := "{{.LowerName}}:" + id
+	if cached{{.Name}}, found := AppCacheService.Get(cacheKey); found {
+		return cached{{.Name}}.(*models.{{.Name}}Get), nil
+	}
+
+
+	objID, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid ID: %w", err)
+	}
+
+	var {{.LowerName}} models.{{.Name}}Get
+	err = s.DB.WithContext(ctx).Model(&models.{{.Name}}{}).Where("id = ?", objID).Scan(&{{.LowerName}}).Error
+	if err != nil {
+		return nil, err
+	}
+
+    // Setting Cache before returning the user
+    AppCacheService.Set(cacheKey, &{{.LowerName}})
+
+	return &{{.LowerName}}, nil
+}
+
+// Get returns {{.LowerName}}s with paginatoin and search
+func (s *{{.Name}}Service) Get(ctx context.Context, paginatoin models.Pagination, searchTerm map[string]any) ([]models.{{.Name}}Get, uint, error) {
+
+	// Build search query if any
+	// Create a base query
+	query := s.DB.Model(&models.{{.Name}}{})
+
+	// Apply search filters dynamically based on the provided searchTerm map
+	if len(searchTerm) > 0 {
+
+		// Loop through the searchTerm map and dynamically apply filters( for boolean values)
+		for key, value := range searchTerm {
+			// Search logic for boolean values
+			if boolValue, ok := value.(string); ok && (boolValue == "true" || boolValue == "false") {
+				switch boolValue {
+				case "true":
+					query = query.Where(key+" = ?", true)
+				case "false":
+					query = query.Where(key+" = ?", false)
+
+				}
+				delete(searchTerm, key)
+			}
+
+		}
+
+		// Loop through the searchTerm map and dynamically apply filters
+		for key, value := range searchTerm {
+			// Apply "LIKE" condition for string fields (or exact match for other types)
+			if strValue, ok := value.(string); ok && strValue != "" {
+				query = query.Or(key+" LIKE ?", "%"+strValue+"%")
+			}
+		}
+	}
+
+	// Count all documents (no filter)
+	var totalCount int64
+	query.WithContext(ctx).Select("id").Count(&totalCount)
+
+
+	var {{.LowerName}}s []models.{{.Name}}Get
+	query.WithContext(ctx).Order("id asc").Limit(int(paginatoin.Size)).Offset(paginatoin.Page-0).Scan(&{{.LowerName}}s)
+			
+
+	return {{.LowerName}}s,uint(totalCount), nil
+}
+
+// Update modifies a {{.Name}}s by ID
+func (s *{{.Name}}Service) Update(ctx context.Context, patch_{{.LowerName}} *models.{{.Name}}Patch, id string) (*models.{{.Name}}Get, error) {
+	// update User
+	var updated{{.Name}} *models.{{.Name}}Get
+
+	{{.LowerName}}_id, err := strconv.Atoi(id)
+	if err != nil {
+		return &models.{{.Name}}Get{},fmt.Errorf("invalid ID: %w", err)
+	}
+
+	err = s.withTransaction(ctx, func(tx *gorm.DB) error {
+			updateFields := make(map[string]any)
+			{{- range .Fields}} {{- if .Patch}}
+			{{- if eq .Name "Password" }}
+			if patch_{{$.LowerName}}.{{.Name}} != nil {
+				// setting password string to hash
+				hashedPassword := models.HashFunc(*patch_{{$.LowerName}}.Password)
+				updateFields["{{.Name | camelToSnake }}"] = hashedPassword
+			}
+			{{- else if eq .Name "ID" }}
+
+			{{- else }}
+			if patch_{{$.LowerName}}.{{.Name}} != nil {
+				updateFields["{{.Name | camelToSnake }}"] = *patch_{{$.LowerName}}.{{.Name}}
+			}
+			{{- end	}}
+			{{- end}}
+			{{- end}}
+			updateFields["updated_at"]=time.Now()
+
+
+			
+			// Update the document by ID
+			err := s.DB.WithContext(ctx).Model(&models.{{.Name}}{}).Where("id= ?", {{.LowerName}}_id).Updates(updateFields).Error
+			if err != nil {
+				return fmt.Errorf("update failed: %w", err)
+			}
+
+			// Removing Cache if update sucess
+			cacheKey := "{{.LowerName}}:" + id
+			AppCacheService.Delete(cacheKey)
+
+			return nil
+		})
+
+	copier.Copy(&updated{{.Name}}, patch_{{.LowerName}})
+	return updated{{.Name}}, err
+}
+
+// Delete removes a {{.LowerName}} by ID
+func (s *{{.Name}}Service) Delete(ctx context.Context, id string) error {
+
+	err := s.withTransaction(ctx, func(tx *gorm.DB) error {
+		objID, err := strconv.Atoi(id)
+		if err != nil {
+			return fmt.Errorf("invalid ID: %w", err)
+		}
+		var {{.LowerName}} models.{{.Name}}
+		err = s.DB.WithContext(ctx).Where("id = ?", objID).First(&{{.LowerName}}).Delete(&{{.LowerName}}).Error
+		if err != nil {
+			return err
+		}
+		// Removing Cache if delete sucess
+		cacheKey := "{{.LowerName}}:" + id
+		AppCacheService.Delete(cacheKey)
+
+		return nil
+	})
+
+	return err
+}
+
+
+{{- range .Relations }}
+// ##########################################################
+// ##########  Relationship  Services to {{.FieldName}}
+// ##########################################################
+
+func (s *{{$.Name}}Service) Add{{$.Name}}To{{.FieldName}}(ctx context.Context, {{$.Name | toLowerCaseName}}ID, {{.LowerFieldName}}ID string) error {
+	// Fetching 
+	var {{$.LowerName}} models.{{$.Name}}
+	{{$.Name | toLowerCaseName}}_id, err := strconv.Atoi({{$.Name | toLowerCaseName}}ID)
+	if res := s.DB.WithContext(ctx).First(&{{$.LowerName}}, {{$.LowerName}}_id); res.Error != nil {
+		return fmt.Errorf("{{$.LowerName}} not found: %w", res.Error)
+		
+	}
+
+	// Fetching
+	var {{.LowerFieldName}} models.{{.FieldName}}
+	{{.LowerFieldName}}_id, err := strconv.Atoi({{.LowerFieldName}}ID)
+	if res := s.DB.WithContext(ctx).First(&{{.LowerFieldName}}, {{.LowerFieldName}}_id); res.Error != nil {
+		return fmt.Errorf("{{.FieldName}} not found: %w", res.Error)
+	}
+	
+	err= s.withTransaction(ctx, func(tx *gorm.DB) error {
+		
+		if err := tx.Model(&{{$.LowerName}}).Association("{{.FieldName}}s").Append(&{{.LowerFieldName}}); err != nil {
+			return fmt.Errorf("failed to associate add relation: %w", err)
+		}
+		return nil
+	})
+	
+	if err != nil {
+		return err
+	}
+
+	
+	return nil
+}
+
+func (s *{{ $.Name}}Service) Remove{{ $.Name}}From{{.FieldName}}(ctx context.Context, {{$.Name | toLowerCaseName}}ID, {{.LowerFieldName}}ID string) error {
+	// Fetching 
+	var {{$.LowerName}} models.{{$.Name}}
+	{{$.Name | toLowerCaseName}}_id, err := strconv.Atoi({{$.Name | toLowerCaseName}}ID)
+	if res := s.DB.WithContext(ctx).First(&{{$.LowerName}}, {{$.LowerName}}_id); res.Error != nil {
+		return fmt.Errorf("{{$.LowerName}} not found: %w", res.Error)
+		
+	}
+
+	// Fetching
+	var {{.LowerFieldName}} models.{{.FieldName}}
+	{{.LowerFieldName}}_id, err := strconv.Atoi({{.LowerFieldName}}ID)
+	if res := s.DB.WithContext(ctx).First(&{{.LowerFieldName}}, {{.LowerFieldName}}_id); res.Error != nil {
+		return fmt.Errorf("{{.FieldName}} not found: %w", res.Error)
+	}
+	
+	err = s.withTransaction(ctx, func(tx *gorm.DB) error {
+		if err := tx.Model(&{{$.LowerName}}).Association("{{.FieldName}}s").Delete(&{{.LowerFieldName}}); err != nil {
+			return fmt.Errorf("failed to remove relation: %w", err)
+		}
+		return nil
+	})
+	
+	if err != nil {
+		return err
+	}
+
+	
+	return nil
+}
+
+
+func (s *{{$.Name}}Service) Get{{$.Name}}{{.FieldName}}s(ctx context.Context, {{$.Name | toLowerCaseName}}ID string, pagination models.Pagination) ([]models.{{.FieldName}}, uint, error) {
+	{{$.Name | toLowerCaseName}}_id, err := strconv.Atoi({{$.Name | toLowerCaseName}}ID)
+	if err != nil {
+		return  nil,0,fmt.Errorf("invalid {{$.Name | toLowerCaseName}} ID: %w", err)
+	}
+	// results var
+	var {{.LowerFieldName}}s []models.{{.FieldName}}
+	var total int64
+
+	{{- if  .MtM }}
+
+	join_string := "FULL JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id"
+	filter_string := "{{.LowerParentName}}_id = ?"
+	
+
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{$.LowerName}}_id).Count(&total).Error
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{$.LowerName}}_id).Order("id asc").Limit(int(pagination.Size)).Offset(int(pagination.Page - 1)).Scan(&{{.LowerFieldName}}s).Error
+	if err != nil {
+		return  nil,0, fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
+	}
+	{{- end }}
+
+	{{- if .OtM}}
+	otm_string := "{{.LowerParentName}}_id = ?"
+	s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{$.LowerName}}_id).Count(&total).Error
+	s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{$.LowerName}}_id).Order("id asc").Limit(int(pagination.Size)).Offset(pagination.Page-1).Scan(&{{.LowerFieldName}}s).Error
+			
+
+	{{- end}}
+
+	return {{.LowerFieldName}}s, uint(total), nil
+}
+// #########################
+// No Pagination Services###
+// #########################
+
+func (s *{{$.Name}}Service) GetAll{{.FieldName}}sFor{{$.Name}}(ctx context.Context, {{$.Name | toLowerCaseName}}ID string) ([]models.{{.FieldName}}, error) {
+	{{$.Name | toLowerCaseName}}_id, err := strconv.Atoi({{$.Name | toLowerCaseName}}ID)
+	if err != nil {
+		return  nil,fmt.Errorf("invalid {{$.Name | toLowerCaseName}} ID: %w", err)
+	}
+	// results var
+	var {{.LowerFieldName}}s []models.{{.FieldName}}
+	
+	{{- if  .MtM }}
+
+	join_string := "FULL JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id"
+	filter_string := "ur.{{.LowerParentName}}_id = ?"
+	
+
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{$.LowerName}}_id).Order("id asc").Scan(&{{.LowerFieldName}}s).Error
+	if err != nil {
+		return nil,fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
+	}
+	{{- end }}
+
+	{{- if .OtM}}
+	otm_string := "{{.LowerParentName}}_id = ?"
+	s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{$.LowerName}}_id).Count(&total).Error
+	s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{$.LowerName}}_id).Scan(&{{.LowerFieldName}}s).Error
+			
+
+	{{- end}}
+
+	return {{.LowerFieldName}}s, nil
+}
+
+
+func (s *{{$.Name}}Service) GetAll{{.FieldName}}s{{$.Name | toLowerCaseName}}DoesNotHave(ctx context.Context, {{$.Name | toLowerCaseName}}ID string) ([]models.{{.FieldName}}, error) {
+	{{$.Name | toLowerCaseName}}_id, err := strconv.Atoi({{$.Name | toLowerCaseName}}ID)
+	if err != nil {
+		return  nil,fmt.Errorf("invalid {{$.Name | toLowerCaseName}} ID: %w", err)
+	}
+	// results var
+	var {{.LowerFieldName}}s []models.{{.FieldName}}
+	
+	{{- if  .MtM }}
+
+	join_string := "FULL JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id AND ur.{{.LowerParentName}}_id = ?"
+	filter_string := "ur.{{.LowerParentName}}_id IS NULL"
+	
+
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{$.LowerName}}_id).Order("id asc").Scan(&{{.LowerFieldName}}s).Error
+	if err != nil {
+		return  nil,fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
+	}
+	{{- end }}
+
+	{{- if .OtM}}
+	otm_string := "{{.LowerParentName}}_id = ?"
+	s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{$.LowerName}}_id).Count(&total).Error
+	s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{$.LowerName}}_id).Scan(&{{.LowerFieldName}}s).Error
+			
+
+	{{- end}}
+
+	return {{.LowerFieldName}}s, nil
+}
+
+
+{{- end}}
+
+
+// ##########################################################
+// ##########  Custom Services Add Here   ###################
+// ##########################################################

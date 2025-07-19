@@ -1,0 +1,46 @@
+package common
+
+
+type ResponseHTTP struct {
+	Success bool        {{.BackTick}}json:"success"{{.BackTick}}
+	Data    interface{} {{.BackTick}}json:"data"{{.BackTick}}
+	Message string      {{.BackTick}}json:"details"{{.BackTick}}
+}
+
+type ResponsePagination struct {
+	Success bool        {{.BackTick}}json:"success"{{.BackTick}}
+	Items   interface{} {{.BackTick}}json:"data"{{.BackTick}}
+	Message string      {{.BackTick}}json:"details"{{.BackTick}}
+	Total   uint        {{.BackTick}}json:"total"{{.BackTick}}
+	Page    uint        {{.BackTick}}json:"page"{{.BackTick}}
+	Size    uint        {{.BackTick}}json:"size"{{.BackTick}}
+	Pages   uint        {{.BackTick}}json:"pages"{{.BackTick}}
+}
+
+
+// Generic function to filter the map based on a list of allowed keys.
+func FilterMapByKeys(input map[string]any, allowedKeys []string) map[string]any {
+	filtered := make(map[string]any)
+
+	for _, key := range allowedKeys {
+		if value, ok := input[key]; ok {
+			filtered[key] = value
+		}
+	}
+
+	return filtered
+}
+
+
+// Generic function to filter the map based on a list of allowed keys.
+func FilterSearchTerms(input map[string]any, allowedKeys []string) []string {
+	filtered := make([]string, 0)
+
+	for _, key := range allowedKeys {
+		if value, ok := input[key]; ok {
+			filtered = append(filtered, value.(string))
+		}
+	}
+
+	return filtered
+}
