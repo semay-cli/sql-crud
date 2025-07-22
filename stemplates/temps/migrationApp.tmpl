@@ -16,12 +16,12 @@ var (
 		Long:  "Migrate to init database",
 		Run: func(cmd *cobra.Command, args []string) {
 			// Check for the type flag
-			migrateType, _ := cmd.Flags().GetString("type")
-			if migrateType == "create" {
+			switch migrateType {
+			case "create":
 				init_migrate()
-			} else if migrateType == "stats" {
+			case "stats":
 				create_views()
-			} else {
+			default:
 				populate_migrate()
 			}
 		},

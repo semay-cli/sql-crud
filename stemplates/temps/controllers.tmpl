@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-playground/validator/v10"
+	validator "github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 	"{{.ProjectName}}/common"
 	"{{.ProjectName}}/{{.AppName}}/models"
@@ -74,7 +74,7 @@ func Get{{.Name}}s(contx echo.Context) error {
 	}
 
 	// Fetch {{.LowerName}}s from service
-	{{.LowerName}}s,totalCount, err := services.Handler{{.Name}}Service.Get(tracer.Tracer, pagination, filteredSearchTerm)
+	{{.LowerName}}s,totalCount, err := services.AppService.Get{{.Name}}s(tracer.Tracer, pagination, filteredSearchTerm)
 	if err != nil {
 		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
 			Success: false,
@@ -114,7 +114,7 @@ func Get{{.Name}}ByID(contx echo.Context) error {
 	id := contx.Param("{{.LowerName}}_id")
 
     // Fetch {{.LowerName}} from service
-	{{.LowerName}}, err := services.Handler{{.Name}}Service.GetOne(tracer.Tracer, id)
+	{{.LowerName}}, err := services.AppService.GetOne{{.Name}}(tracer.Tracer, id)
 	if err != nil {
 		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
 			Success: false,
@@ -175,7 +175,7 @@ func Post{{.Name}}(contx echo.Context) error {
 
 
     // post {{.LowerName}} from service
-	{{.LowerName}}, err := services.Handler{{.Name}}Service.Create(tracer.Tracer, posted_{{.LowerName}})
+	{{.LowerName}}, err := services.AppService.Create{{.Name}}(tracer.Tracer, posted_{{.LowerName}})
 	if err != nil {
 		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
 			Success: false,
@@ -239,7 +239,7 @@ func Patch{{.Name}}(contx echo.Context) error {
 
 
     // patch {{.LowerName}} from service
-	{{.LowerName}}, err := services.Handler{{.Name}}Service.Update(tracer.Tracer, patch_{{.LowerName}},id)
+	{{.LowerName}}, err := services.AppService.Update{{.Name}}(tracer.Tracer, patch_{{.LowerName}},id)
 	if err != nil {
 		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
 			Success: false,
@@ -279,7 +279,7 @@ func Delete{{.Name}}(contx echo.Context) error {
 
 
     // delete {{.LowerName}} from service
-	err := services.Handler{{.Name}}Service.Delete(tracer.Tracer, id)
+	err := services.AppService.Delete{{.Name}}(tracer.Tracer, id)
 	if err != nil {
 		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
 			Success: false,
@@ -297,229 +297,3 @@ func Delete{{.Name}}(contx echo.Context) error {
 }
 
 
-
-{{- range .Relations }}
-// ##########################################################
-// ##########  Relationship  Services to {{.FieldName}}
-// ##########################################################
-// Add {{.FieldName}} to {{.ParentName}}
-// @Summary Add {{.ParentName}} to {{.FieldName}}
-// @Description Add {{.FieldName}} {{.ParentName}}
-// @Tags {{.FieldName}}{{.ParentName}}s
-// @Security ApiKeyAuth
-// @Accept json
-// @Produce json
-// @Param {{.LowerFieldName}}_id path string true "{{.FieldName}} ID"
-// @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
-// @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerFieldName}}_id{{ "}" }}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [post]
-func Add{{.FieldName}}To{{.ParentName}}(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
-
-	// validate path params
-	{{.LowerFieldName}}_id := contx.Param("{{.LowerFieldName}}_id")
-
-	// validate path params
-	{{.LowerParentName}}_id := contx.Param("{{.LowerParentName}}_id")
-
-
-	err := services.Handler{{$.Name}}Service.Add{{$.Name}}To{{.FieldName}}(tracer.Tracer, {{.LowerParentName}}_id,{{.LowerFieldName}}_id)
-	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
-	}
-
-	// return value if transaction is sucessfull
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Message: "Success Added {{.FieldName}} to  {{.ParentName}}.",
-		Data:    nil,
-	})
-}
-
-
-// Delete {{.FieldName}} from {{.ParentName}}
-// @Summary Delete {{.FieldName}}
-// @Description Delete {{.FieldName}} {{.ParentName}}
-// @Tags {{.FieldName}}{{.ParentName}}s
-// @Security ApiKeyAuth
-// @Accept json
-// @Produce json
-// @Param {{.LowerFieldName}}_id path string true "{{.FieldName}} ID"
-// @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Success 200 {object} common.ResponseHTTP{data=models.{{.ParentName}}Post}
-// @Failure 400 {object} common.ResponseHTTP{}
-// @Failure 500 {object} common.ResponseHTTP{}
-// @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerFieldName}}_id{{ "}" }}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [delete]
-func Delete{{.FieldName}}From{{.ParentName}}(contx echo.Context) error {
-	//  Geting tracer
-		tracer := contx.Get("tracer").(*observe.RouteTracer)
-
-	// validate path params
-	{{.LowerFieldName}}_id := contx.Param("{{.LowerFieldName}}_id")
-
-	// validate path params
-	{{.LowerParentName}}_id := contx.Param("{{.LowerParentName}}_id")
-
-
-	// removing {{.FieldName}}From{{.ParentName}}
-	err := services.Handler{{$.Name}}Service.Remove{{ $.Name}}From{{.FieldName}}(tracer.Tracer, {{.LowerParentName}}_id,{{.LowerFieldName}}_id)
-	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
-	}
-
-	// return value if transaction is sucessfull
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Message: "Success Removing {{.FieldName}} From {{.ParentName}}.",
-		Data:    nil,
-	})
-}
-
-
-// Get {{.FieldName}}s of {{.ParentName}}
-// @Summary Get {{.ParentName}} to {{.FieldName}}
-// @Description Get {{.FieldName}} {{.ParentName}}
-// @Tags {{.FieldName}}{{.ParentName}}s
-// @Security ApiKeyAuth
-// @Accept json
-// @Produce json
-// @Param page query int true "page"
-// @Param size query int true "page size"
-// @Success 200 {object} common.ResponsePagination{data=[]models.{{.FieldName}}Get}
-// @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
-// @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
-func Get{{.FieldName}}sOf{{.ParentName}}s(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
-
-	//  parsing Query Prameters
-	Page, _ := strconv.Atoi(contx.QueryParam("page"))
-	Limit, _ := strconv.Atoi(contx.QueryParam("size"))
-	//  checking if query parameters  are correct
-	if Page == 0 || Limit == 0 {
-		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
-			Success: false,
-			Message: "Not Allowed, Bad request",
-			Data:    nil,
-		})
-	}
-
-	// validate path params
-	{{.LowerParentName}}_id := contx.Param("{{.LowerParentName}}_id")
-
-    // Prepare pagination model
-	pagination := models.Pagination{
-		Page:   Page - 1, // assuming pages are 0-indexed in backend
-		Size:   Limit,
-	}
-
-
-    // Fetch {{$.LowerName}}s from service
-	{{.LowerFieldName}}s,totalCount, err := services.Handler{{$.Name}}Service.Get{{$.Name}}{{.FieldName}}s(tracer.Tracer,{{.LowerParentName}}_id ,pagination)
-	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
-	}
-
-
-	// Send paginated response
-	return contx.JSON(http.StatusOK, common.ResponsePagination{
-		Success: true,
-		Message: "Success",
-		Items:   {{.LowerFieldName}}s,
-		Total:   totalCount,
-		Page:    uint(Page),
-		Size:    uint(Limit),
-	})
-}
-
-// #########################
-// No Pagination Services###
-// #########################
-
-
-// Get {{.FieldName}}s of {{.ParentName}} Complement
-// @Summary Get {{.ParentName}} to {{.FieldName}} Complement
-// @Description Get {{.FieldName}} {{.ParentName}} Complement
-// @Tags {{.FieldName}}{{.ParentName}}s
-// @Security ApiKeyAuth
-// @Accept json
-// @Produce json
-// @Success 200 {object} common.ResponseHTTP{data=[]models.{{.FieldName}}Get}
-// @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
-// @Router /{{$.AppName | replaceString}}/{{.LowerFieldName}}noncomplement{{.LowerParentName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
-func GetAll{{.FieldName}}sOf{{.ParentName}}s(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
-
-	// validate path params
-	{{.LowerParentName}}_id := contx.Param("{{.LowerParentName}}_id")
-
-
-    // Fetch {{$.LowerName}}s from service
-	{{.LowerFieldName}}s, err := services.Handler{{$.Name}}Service.GetAll{{.FieldName}}sFor{{$.Name}}(tracer.Tracer,{{.LowerParentName}}_id)
-	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
-	}
-
-	// return value if transaction is sucessfull
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Data:   {{.LowerFieldName}}s,
-		Message: "working",
-	})
-}
-
-// Get {{.FieldName}}s of {{.ParentName}} Not Complement
-// @Summary Get {{.ParentName}} to {{.FieldName}} Not Complement
-// @Description Get {{.FieldName}} {{.ParentName}} Not Complement
-// @Tags {{.FieldName}}{{.ParentName}}s
-// @Security ApiKeyAuth
-// @Accept json
-// @Produce json
-// @Success 200 {object} common.ResponseHTTP{data=[]models.{{.FieldName}}Get}
-// @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
-// @Router /{{$.AppName | replaceString}}/{{.LowerFieldName}}complement{{.LowerParentName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
-func Get{{.FieldName}}Complement{{.ParentName}}s(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
-
-	// validate path params
-	{{.LowerParentName}}_id := contx.Param("{{.LowerParentName}}_id")
-
-
-    // Fetch {{$.LowerName}}s from service
-	{{.LowerFieldName}}s, err := services.Handler{{$.Name}}Service.GetAll{{.FieldName}}s{{$.LowerName }}DoesNotHave(tracer.Tracer,{{.LowerParentName}}_id)
-	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
-	}
-
-
-	// return value if transaction is sucessfull
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Data:   {{.LowerFieldName}}s,
-		Message: "working",
-	})
-}
-
-
-{{- end }}

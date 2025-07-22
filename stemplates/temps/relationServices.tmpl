@@ -1,0 +1,218 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+
+	"{{ .ProjectName }}/{{ .AppName }}/models"
+	 "gorm.io/gorm"
+	//"github.com/jinzhu/copier"
+)
+
+
+
+
+// ##########################################################
+// ##########  Relationship  Services to {{.FieldName}}
+// ##########################################################
+
+func (s *AppDatabaseService) Add{{.ParentName}}To{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string) error {
+	// Fetching 
+	var {{.LowerParentName}} models.{{.ParentName}}
+	{{.ParentName | toLowerCaseName}}_id, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+	if err != nil {
+		return err
+	}
+
+	if res := s.DB.WithContext(ctx).First(&{{.LowerParentName}}, {{.LowerParentName}}_id); res.Error != nil {
+		return fmt.Errorf("{{.ParentName}} not found: %w", res.Error)
+		
+	}
+
+	var {{.LowerFieldName}} models.{{.FieldName}}
+	{{.LowerFieldName}}_id, err := strconv.Atoi({{.LowerFieldName}}ID)
+	if err != nil {
+		return err
+	}
+
+	// Fetching
+	if res := s.DB.WithContext(ctx).First(&{{.LowerFieldName}}, {{.LowerFieldName}}_id); res.Error != nil {
+		return fmt.Errorf("{{.FieldName}} not found: %w", res.Error)
+	}
+	
+	err= s.withTransaction(ctx, func(tx *gorm.DB) error {
+		
+		if err := tx.Model(&{{.LowerParentName}}).Association("{{.FieldName}}s").Append(&{{.LowerFieldName}}); err != nil {
+			return fmt.Errorf("failed to associate add relation: %w", err)
+		}
+		return nil
+	})
+	
+	if err != nil {
+		return err
+	}
+
+	
+	return nil
+}
+
+func (s *AppDatabaseService) Remove{{ .ParentName}}From{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string) error {
+	// Fetching 
+	var {{.LowerParentName}} models.{{.ParentName}}
+	{{.ParentName | toLowerCaseName}}_id, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+	if err !=nil {
+		return  err
+	}
+
+	if res := s.DB.WithContext(ctx).First(&{{.LowerParentName}}, {{.LowerParentName}}_id); res.Error != nil {
+		return fmt.Errorf("{{.ParentName}} not found: %w", res.Error)
+		
+	}
+
+	var {{.LowerFieldName}} models.{{.FieldName}}
+	{{.LowerFieldName}}_id, err := strconv.Atoi({{.LowerFieldName}}ID)
+	if err !=nil {
+		return  err
+	}
+
+	// Fetching
+	if res := s.DB.WithContext(ctx).First(&{{.LowerFieldName}}, {{.LowerFieldName}}_id); res.Error != nil {
+		return fmt.Errorf("{{.FieldName}} not found: %w", res.Error)
+	}
+	
+	err = s.withTransaction(ctx, func(tx *gorm.DB) error {
+		if err := tx.Model(&{{.LowerParentName}}).Association("{{.FieldName}}s").Delete(&{{.LowerFieldName}}); err != nil {
+			return fmt.Errorf("failed to remove relation: %w", err)
+		}
+		return nil
+	})
+	
+	if err != nil {
+		return err
+	}
+
+	
+	return nil
+}
+
+
+func (s *AppDatabaseService) Get{{.ParentName}}{{.FieldName}}s(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, pagination models.Pagination) ([]models.{{.FieldName}}, uint, error) {
+	{{.ParentName | toLowerCaseName}}_id, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+	if err != nil {
+		return  nil,0,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %w", err)
+	}
+	// results var
+	var {{.LowerFieldName}}s []models.{{.FieldName}}
+	var total int64
+
+	{{- if  .MtM }}
+
+	join_string := "FULL JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id"
+	filter_string := "{{.LowerParentName}}_id = ?"
+	
+
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{.LowerParentName}}_id).Count(&total).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	_ = pagination.Validate()
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{.LowerParentName}}_id).Order("id asc").Limit(int(pagination.Size)).Offset(int(pagination.Page - 1)).Scan(&{{.LowerFieldName}}s).Error
+	if err != nil {
+		return  nil,0, fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
+	}
+	{{- end }}
+
+	{{- if .OtM}}
+	otm_string := "{{.LowerParentName}}_id = ?"
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{.LowerParentName}}_id).Count(&total).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{.LowerParentName}}_id).Order("id asc").Limit(int(pagination.Size)).Offset(pagination.Page-1).Scan(&{{.LowerFieldName}}s).Error
+	if err != nil {
+		return nil, 0, err
+	}			
+
+	{{- end}}
+
+	return {{.LowerFieldName}}s, uint(total), nil
+}
+// #########################
+// No Pagination Services###
+// #########################
+
+func (s *AppDatabaseService) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string) ([]models.{{.FieldName}}, error) {
+	{{.ParentName | toLowerCaseName}}_id, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+	if err != nil {
+		return  nil,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %w", err)
+	}
+	// results var
+	var {{.LowerFieldName}}s []models.{{.FieldName}}
+	
+	{{- if  .MtM }}
+
+	join_string := "FULL JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id"
+	filter_string := "ur.{{.LowerParentName}}_id = ?"
+	
+
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{.LowerParentName}}_id).Order("id asc").Scan(&{{.LowerFieldName}}s).Error
+	if err != nil {
+		return nil,fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
+	}
+	{{- end }}
+
+	{{- if .OtM}}
+	otm_string := "{{.LowerParentName}}_id = ?"
+	
+
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{.LowerParentName}}_id).Scan(&{{.LowerFieldName}}s).Error
+	if err != nil {
+		return nil, err
+	}
+			
+
+	{{- end}}
+
+	return {{.LowerFieldName}}s, nil
+}
+
+
+func (s *AppDatabaseService) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string) ([]models.{{.FieldName}}, error) {
+	{{.ParentName | toLowerCaseName}}_id, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+	if err != nil {
+		return  nil,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %w", err)
+	}
+	// results var
+	var {{.LowerFieldName}}s []models.{{.FieldName}}
+	
+	{{- if  .MtM }}
+
+	join_string := "FULL JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id AND ur.{{.LowerParentName}}_id = ?"
+	filter_string := "ur.{{.LowerParentName}}_id IS NULL"
+	
+
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{.LowerParentName}}_id).Order("id asc").Scan(&{{.LowerFieldName}}s).Error
+	if err != nil {
+		return  nil,fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
+	}
+	{{- end }}
+
+	{{- if .OtM}}
+	otm_string := "{{.LowerParentName}}_id = ?"
+	
+
+	err= s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{.LowerParentName}}_id).Scan(&{{.LowerFieldName}}s).Error
+	if err != nil {
+		return nil, err
+	}	
+
+	{{- end}}
+
+	return {{.LowerFieldName}}s, nil
+}
+
+
+
+

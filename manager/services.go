@@ -29,16 +29,14 @@ func runServiceCommand(cmd *cobra.Command, args []string) {
 		fmt.Println("Error: --app flag is required.")
 		return
 	}
-
 	// Change to the app's directory and load the config data
 	if err := handleAppDirectoryAndLoadConfig(appName); err != nil {
 		fmt.Println(err)
 		return
 	}
-
 	generate.GenerateUtilsApp(stemplates.ProjectSettings)
-	generate.GenerateServices(stemplates.RenderData)
 	generate.GenerateServicesInit(stemplates.RenderData)
+	generate.GenerateServices(stemplates.RenderData)
 	stemplates.CommonCMD()
 
 }

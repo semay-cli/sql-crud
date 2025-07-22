@@ -48,6 +48,18 @@ func WriteTemplateToFileModel(filePath string, tmpl *template.Template, data Mod
 	}
 }
 
+func WriteTemplateToFileRelation(filePath string, tmpl *template.Template, data Relationship) {
+	f, err := os.Create(filePath)
+	if err != nil {
+		panic(fmt.Errorf("failed to create file %s: %w", filePath, err))
+	}
+	defer f.Close()
+
+	if err := tmpl.Execute(f, data); err != nil {
+		panic(fmt.Errorf("failed to execute template on %s: %w", filePath, err))
+	}
+}
+
 func LoadTemplate(name string) *template.Template {
 	tmplContent, err := TemplateFS.ReadFile("temps/" + name + ".tmpl")
 	if err != nil {

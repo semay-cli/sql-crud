@@ -167,7 +167,7 @@ func waitForShutdown(app *echo.Echo, scheduledTasks []*tasks.Scheduler, ctx cont
 func startServer(app *echo.Echo) {
 	{{- range .AppNames}}
         // create client
-    {{ . | replaceString }}_client, err := database.ReturnMongoClient("{{ . |  replaceString }}")
+    {{ . | replaceString }}_client, err := database.ReturnSession("{{ . |  replaceString }}")
 		if err != nil {
 				panic("unable to initalize services")
 		}

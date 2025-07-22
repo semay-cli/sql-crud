@@ -41,7 +41,6 @@ func runModelsCommand(cmd *cobra.Command, args []string) {
 	// Generate models and migrations
 	if modelsType == "init" {
 		generate.GenerateModels(stemplates.RenderData)
-
 	} else {
 		generate.GenerateModels(stemplates.RenderData)
 		stemplates.CommonCMD()

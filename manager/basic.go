@@ -42,7 +42,6 @@ var (
 					stemplates.RenderData.ProjectName = moduleName
 				}
 
-				fmt.Println(moduleName)
 				// Get current working directory
 				currentDir, _ := os.Getwd()
 				generate.GenerateMainAndManager(stemplates.RenderData)
@@ -112,6 +111,7 @@ func handleAppInitialization(appName, currentDir, authAppName string) {
 		generate.GenerateSSOAuth(stemplates.RenderData)
 	} else {
 		// Generate the Django auth Schema app
+		// generate.GenerateSSOAuth(stemplates.RenderData)
 		generate.GenerateDjangoAuth(stemplates.RenderData)
 	}
 }

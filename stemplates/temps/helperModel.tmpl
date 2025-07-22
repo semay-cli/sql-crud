@@ -13,10 +13,30 @@ const (
 	charset    = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
-// Helper for pagination
+// Pagination represents pagination parameters used in API requests.
 type Pagination struct {
-	Page   int
-	Size   int
+	Page int // Page number (starts from 1)
+	Size int // Number of items per page
+}
+
+// Validate checks and adjusts the pagination values to enforce sane defaults and limits.
+// Returns an error if the input is invalid (e.g., negative numbers).
+func (p *Pagination) Validate() error {
+
+	// Set default values if not provided or invalid
+	if p.Page <= 0 {
+		p.Page = 1
+	}
+	if p.Size <= 0 {
+		p.Size = 20
+	}
+
+	// Enforce maximum limit
+	if p.Size > 100 {
+		p.Size = 100
+	}
+
+	return nil
 }
 
 

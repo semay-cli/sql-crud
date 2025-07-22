@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"{{.ProjectName}}/observe"
-	"{{.ProjectName}}/database"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -21,9 +20,14 @@ func otelechospanstarter(next echo.HandlerFunc) echo.HandlerFunc {
 		if err != nil {
 			return err
 		}
-
-		span.SetAttributes(attribute.String("response", fmt.Sprintf("%v", ctx.Response().Status)))
-		span.End()
+		// Only log failed requests (status >= 400)
+        status := ctx.Response().Status
+        if status >= 400 {
+            span.SetAttributes(attribute.String("response", fmt.Sprintf("%v", status)))
+            span.RecordError(fmt.Errorf("HTTP error: %d", status))
+        }
+        span.End()
+		
 		return nil
 	}
 }

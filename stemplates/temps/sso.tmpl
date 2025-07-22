@@ -139,7 +139,7 @@
             "name": "Password",
             "type": "string",
             "annotation": "gorm:\"not null;\" json:\"password,omitempty\"",
-            "curd_flag": "false$false$false$true$false$false"
+            "curd_flag": "false$true$true$true$false$false"
           },
           {
             "name": "DateRegistred",
@@ -176,25 +176,7 @@
             "type": "[]Scope",
             "annotation": "gorm:\"many2many:user_scopes; constraint:OnUpdate:CASCADE; OnDelete:CASCADE;\" json:\"scopes,omitempty\"",
             "curd_flag": "false$false$false$false$false$true"
-          },
-          {
-            "name": "GoogleID",
-            "type": "*string",
-            "annotation": "gorm:\"unique; index\" json:\"google_id,omitempty\"",
-            "curd_flag": "true$false$false$false$false$false"
-          },
-          {
-            "name": "MicrosoftID",
-            "type": "*string",
-            "annotation": "gorm:\"unique; index\" json:\"microsoft_id,omitempty\"",
-            "curd_flag": "true$false$false$false$false$false"
-          },
-          {
-            "name": "AuthProvider",
-            "type": "string",
-            "annotation": "gorm:\"type:string;\" json:\"auth_provider,omitempty\" validate:\"required,eq=Local|eq=Google|eq=Microsoft\"",
-            "curd_flag": "true$true$true$false$true$false"
-          }
+          }        
         ]
       },
       {

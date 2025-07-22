@@ -110,6 +110,7 @@ type Relationship struct {
 	OtM             bool    `json:"otm"`
 	MtO             bool    `json:"mto"`
 	BackTick        string  `json:"back_tick"`
+	ProjectName     string  `json:"project_name"`
 }
 
 // Field represents a model field.
@@ -244,6 +245,8 @@ func initializeFieldsAndRelationships(model *Model) {
 		field.AppName = RenderData.AppName
 		field.ProjectName = RenderData.ProjectName
 		field.RandomFieldValue = generateRandomValue(field.Type)
+		field.ProjectName = RenderData.ProjectName
+
 	}
 
 	model.Relations = initializeRelations(model)
@@ -264,6 +267,7 @@ func initializeRelations(model *Model) []Relationship {
 			OtM:             rlf[1] == "otm",
 			MtO:             rlf[1] == "mto",
 			BackTick:        "`",
+			ProjectName:     RenderData.ProjectName,
 		}
 		if len(rlf) > 2 {
 			curRelation.TableName = rlf[2]
@@ -280,12 +284,13 @@ func CommonProjectName(projectName string, authAppName string, authAppType strin
 		authAppName = "admin_app"
 	}
 
-	if authAppType == "standalone" {
+	switch authAppType {
+	case "standalone":
 		authAppType = "standalone"
-	} else if authAppType == "sso" {
+	case "sso":
 		authAppType = "sso"
-	} else {
-		authAppType = "standalone"
+	default:
+		authAppType = "sso"
 
 	}
 
