@@ -108,7 +108,7 @@ func (s *AppDatabaseService) Get{{.ParentName}}{{.FieldName}}s(ctx context.Conte
 
 	{{- if  .MtM }}
 
-	join_string := "FULL JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id"
+	join_string := "LEFT JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id"
 	filter_string := "{{.LowerParentName}}_id = ?"
 	
 
@@ -130,6 +130,7 @@ func (s *AppDatabaseService) Get{{.ParentName}}{{.FieldName}}s(ctx context.Conte
 	if err != nil {
 		return nil, 0, err
 	}
+	
 	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{.LowerParentName}}_id).Order("id asc").Limit(int(pagination.Size)).Offset(pagination.Page-1).Scan(&{{.LowerFieldName}}s).Error
 	if err != nil {
 		return nil, 0, err
