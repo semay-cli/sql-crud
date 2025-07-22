@@ -154,6 +154,20 @@ func handleProjectType(projectType, frame string, cmd *cobra.Command) {
 			generate.GenerateTasks(stemplates.RenderData)
 			stemplates.CommonCMD()
 		}
+	case "migrate":
+		appName, _ := cmd.Flags().GetString("app")
+		if appName != "" {
+			fmt.Println("migration type does not need app flag")
+		} else {
+			stemplates.InitProjectJSON()
+			stemplates.RenderData.AuthAppName = stemplates.ProjectSettings.AuthAppName
+			stemplates.RenderData.AppName = stemplates.ProjectSettings.AuthAppName
+			stemplates.RenderData.AppNames = stemplates.ProjectSettings.AppNames
+			stemplates.RenderData.ProjectName = stemplates.ProjectSettings.ProjectName
+			stemplates.RenderData.AuthAppType = stemplates.ProjectSettings.AuthAppType
+			generate.GenerateAppDatabaseMigration(stemplates.RenderData)
+			stemplates.CommonCMD()
+		}
 	default:
 		fmt.Println(frame)
 		// fmt.Printf("Args: %#v\n", args)
@@ -180,7 +194,7 @@ func init() {
 	initalizemodule.Flags().StringP("type", "t", "", "specify if you are using standalone authentication like django admin or sso like solution")
 
 	// Register flags for the 'basic' command
-	basicCommand.Flags().StringP("type", "t", "", "Specify the type of folder structure to generate: db, logs, tasks,service,tracer,config")
+	basicCommand.Flags().StringP("type", "t", "", "Specify the type of folder structure to generate: db, logs, tasks,service,tracer,config,migrate")
 	basicCommand.Flags().StringP("frame", "f", "", "Specify the Spanner function you want for the tracer, echo/fiber, meant to be used with otel flag")
 	basicCommand.Flags().StringP("name", "n", "", "Specify the project module name as in github.com/someuser/someproject for the json template generation")
 	basicCommand.Flags().StringP("app", "a", "", "Specify the app name, all it will try to generate for all jsons")
