@@ -281,7 +281,7 @@ func initializeRelations(model *Model) []Relationship {
 // CommonProjectName saves the project name into the project JSON file.
 func CommonProjectName(projectName string, authAppName string, authAppType string) {
 	if authAppName == "" {
-		authAppName = "admin_app"
+		authAppName = "blue-admin"
 	}
 
 	switch authAppType {

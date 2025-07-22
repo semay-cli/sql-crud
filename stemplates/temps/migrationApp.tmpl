@@ -16,6 +16,7 @@ var (
 		Long:  "Migrate to init database",
 		Run: func(cmd *cobra.Command, args []string) {
 			// Check for the type flag
+			migrateType, _ := cmd.Flags().GetString("app")
 			switch migrateType {
 			case "create":
 				init_migrate()

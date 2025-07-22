@@ -89,9 +89,12 @@ func (s *AppDatabaseService) GetOne{{.Name}}(ctx context.Context, id string) (*m
 	}
 
 	var {{.LowerName}} models.{{.Name}}Get
-	err = s.DB.WithContext(ctx).Model(&models.{{.Name}}{}).Where("id = ?", objID).Scan(&{{.LowerName}}).Error
-	if err != nil {
-		return nil, err
+	result := s.DB.WithContext(ctx).Model(&models.{{.Name}}{}).Where("id = ?", objID).Scan(&{{.LowerName}})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, fmt.Errorf("no users found")
 	}
 
     // Setting Cache before returning the user
@@ -142,8 +145,14 @@ func (s *AppDatabaseService) Get{{.Name}}s(ctx context.Context, paginatoin model
 
 	var {{.LowerName}}s []models.{{.Name}}Get
 	_ = paginatoin.Validate()
-	query.WithContext(ctx).Order("id asc").Limit(int(paginatoin.Size)).Offset(paginatoin.Page-0).Scan(&{{.LowerName}}s)
-			
+	result := query.WithContext(ctx).Order("id asc").Limit(int(paginatoin.Size)).Offset(paginatoin.Page-1).Scan(&{{.LowerName}}s)
+	if result.Error != nil {
+		return nil, 0, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, 0, fmt.Errorf("no users found")
+	}
+
 
 	return {{.LowerName}}s,uint(totalCount), nil
 }
@@ -181,9 +190,13 @@ func (s *AppDatabaseService) Update{{.Name}}(ctx context.Context, patch_{{.Lower
 
 			
 			// Update the document by ID
-			err := s.DB.WithContext(ctx).Model(&models.{{.Name}}{}).Where("id= ?", {{.LowerName}}_id).Updates(updateFields).Error
-			if err != nil {
-				return fmt.Errorf("update failed: %w", err)
+			result := s.DB.WithContext(ctx).Model(&models.{{.Name}}{}).Where("id= ?", {{.LowerName}}_id).Updates(updateFields)
+			if result.Error != nil {
+			return fmt.Errorf("update failed: %w", result.Error)
+			}
+
+			if result.RowsAffected == 0 {
+				return fmt.Errorf("items does not exist found")
 			}
 
 			// Removing Cache if update sucess

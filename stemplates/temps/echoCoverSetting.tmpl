@@ -1,0 +1,35 @@
+package testsetting
+
+	import (
+	{{.AppName | replaceString }} "{{ .ProjectName }}/{{.AppName }}"
+	models "{{.ProjectName}}/{{.AppName }}/models"
+	{{.AppName | replaceString }}_service "{{.ProjectName}}/{{.AppName }}/services"
+	"{{.ProjectName}}/database"
+	"github.com/labstack/echo/v4"
+	"github.com/joho/godotenv"
+)
+
+	var (
+		TestApp  *echo.Echo
+		GroupPath = "/api/v1/{{ .AppName | replaceString }}"
+	)
+
+	func SetupTestApp() {
+		err := godotenv.Load(".test.env")
+		if err != nil {
+			panic("Error loading .env file")
+		}
+
+		models.InitDatabase(true)
+		TestApp = echo.New()
+		{{ .AppName | replaceString }}.SetupRoutes(TestApp)
+
+		// initalizse  dbconn and service
+		{{.AppName | replaceString }}_service_client, err := database.ReturnSession("{{.AppName | replaceString }}")
+		if err != nil {
+			panic("unable to initalize services")
+		}
+
+		// initialize services
+		{{.AppName | replaceString }}_service.InitServices({{.AppName | replaceString }}_service_client)
+	}

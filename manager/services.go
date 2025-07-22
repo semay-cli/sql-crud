@@ -21,7 +21,7 @@ var (
 
 // runModelsCommand handles the execution of the 'models' command
 func runServiceCommand(cmd *cobra.Command, args []string) {
-
+	stemplates.InitProjectJSON()
 	// framework, _ := cmd.Flags().GetString("frame")
 	appName, _ := cmd.Flags().GetString("app")
 
@@ -34,6 +34,10 @@ func runServiceCommand(cmd *cobra.Command, args []string) {
 		fmt.Println(err)
 		return
 	}
+
+	stemplates.RenderData.AppName = appName
+	stemplates.ProjectSettings.CurrentAppName = appName
+
 	generate.GenerateUtilsApp(stemplates.ProjectSettings)
 	generate.GenerateServicesInit(stemplates.RenderData)
 	generate.GenerateServices(stemplates.RenderData)

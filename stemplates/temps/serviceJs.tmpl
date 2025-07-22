@@ -1,0 +1,86 @@
+import { api } from "./client";
+
+export const {{.LowerName}}Service = {
+  // Get a paginated list of {{.LowerName}}s
+  get{{.Name}}s: (params = {}) => {
+    const { page = 1, size = 10 } = params;
+    return api.get("/{{ .AppName | replaceString }}/{{.LowerName}}", params);
+  },
+
+  // Get a specific {{.LowerName}} by ID
+  get{{.Name}}ById: ({{.LowerName}}Id) => {
+    return api.get({{.BackTick}}/{{ .AppName | replaceString }}/{{.LowerName}}/${{ "{" }}{{.LowerName}}Id{{ "}" }}{{.BackTick}});
+  },
+
+  // Create a new {{.LowerName}}
+  create{{.Name}}: ({{.LowerName}}Data) => {
+    return api.post("/{{ .AppName | replaceString }}/{{.LowerName}}", {{.LowerName}}Data);
+  },
+
+  // Update a {{.LowerName}}
+  update{{.Name}}: (data) => {
+    return api.patch({{.BackTick}}/{{ .AppName | replaceString }}/{{.LowerName}}/${{ "{" }}data?.{{.LowerName}}Id{{ "}" }}{{.BackTick}}, data?.{{.LowerName}}Data);
+  },
+
+  // Delete a {{.LowerName}}
+  delete{{.Name}}: ({{.LowerName}}Id) => {
+    return api.delete({{.BackTick}}/{{ .AppName | replaceString }}/{{.LowerName}}/${{ "{" }}{{.LowerName}}Id{{ "}" }}{{.BackTick}});
+  },
+
+{{- range .Relations }}
+{{- if .MtM}}
+//###############################################
+// Now realationshipQeury Endpoints(Many to Many)
+//###############################################
+	get{{.ParentName}}{{.FieldName}}: (data)=>{
+		return api.get({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}},{ page: data?.page, size: data?.size });
+	},
+
+	// Get {{.LowerFieldName}}s that can be assigned to a {{.LowerFieldName}}
+	getAvailable{{.FieldName}}sFor{{.ParentName}}: ({{.LowerParentName}}Id) => {
+	    return api.get({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}complement{{.LowerParentName}}/${{ "{" }}{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+	},
+	// Get permissions that can be assigned to a {{.LowerFieldName}}
+	getAttached{{.FieldName}}sFor{{.ParentName}}: ({{.LowerParentName}}Id) => {
+	    return api.get({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}noncomplement{{.LowerParentName}}/${{ "{" }}{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+	},
+
+	add{{.FieldName}}{{.ParentName}}: (data) => {
+		return api.post({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+	},
+
+	delete{{.FieldName}}{{.ParentName}}: (data) => {
+		return api.delete({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+	},
+{{- end}}
+{{- end }}
+{{- range .Relations }}
+{{- if .OtM}}
+//###############################################
+// Now realationshipQeury Endpoints(one to Many)
+//###############################################
+	get{{.ParentName}}{{.FieldName}}: (data)=>{
+		return api.get({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}},{ page: data?.page, size: data?.size });
+	},
+
+	// Get {{.LowerFieldName}}s that can be assigned to a {{.LowerFieldName}}
+	getAvailable{{.FieldName}}sFor{{.ParentName}}: ({{.LowerParentName}}Id) => {
+	    return api.get({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}complement{{.LowerParentName}}/${{ "{" }}{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+	},
+	// Get permissions that can be assigned to a {{.LowerFieldName}}
+	getAttached{{.FieldName}}sFor{{.ParentName}}: ({{.LowerParentName}}Id) => {
+	    return api.get({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}noncomplement{{.LowerParentName}}/${{ "{" }}{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+	},
+
+	add{{.FieldName}}{{.ParentName}}: (data) => {
+		return api.post({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+	},
+
+	delete{{.FieldName}}{{.ParentName}}: (data) => {
+		return api.delete({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+	},
+
+{{- end }}
+{{- end }}
+
+}

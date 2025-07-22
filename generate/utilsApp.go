@@ -8,9 +8,11 @@ import (
 
 func GenerateUtilsApp(data stemplates.ProjectSetting) {
 	tmpl := stemplates.LoadTemplate("utilsApp")
+	tmplHelp := stemplates.LoadTemplate("jwtUtils")
 	err := os.MkdirAll("utils", os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
 	stemplates.WriteTemplateToFileSetting("utils/jwt_utils.go", tmpl, data)
+	stemplates.WriteTemplateToFileSetting("utils/utils.go", tmplHelp, data)
 }

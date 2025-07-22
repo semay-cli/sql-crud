@@ -1,0 +1,66 @@
+import { api } from "./client";
+import { toast } from "sonner";
+
+export const authService = {
+  login: async (credentials) => {
+    try {
+      	const response = await api.post("/{{ .AppName | replaceString }}/login", {
+	        email:      credentials?.username, // Using email field for username
+	        password:   credentials?.password,
+	        grant_type: credentials?.grant_type || "authorization_code",
+	        token:     credentials?.token_type || "Bearer"
+        });
+
+        const user = await api.post("/{{ .AppName | replaceString }}/login", {
+	        "email":"tokendecode@mail.com",
+	        "password":"123456",
+	        "grant_type":"token_decode",
+	        "token": response.data.access_token
+	        });
+
+
+
+
+      if (response && response.data) {
+        localStorage.setItem("isAuthenticated", "true");
+        localStorage.setItem("app-token", response.data.access_token);
+        localStorage.setItem("refresh-token", response.data.refresh_token);
+
+        // Store basic user info
+        localStorage.setItem("user", JSON.stringify(user?.data));
+
+        return { success: true };
+      } else {
+        throw new Error("Invalid response from server");
+      }
+    } catch (error) {
+      toast.error(error.message || "Login failed");
+      throw error;
+    }
+  },
+
+  logout: () => {
+    localStorage.removeItem("isAuthenticated");
+    localStorage.removeItem("app-token");
+    localStorage.removeItem("refresh-token");
+    localStorage.removeItem("user");
+    return { success: true };
+  },
+
+  isAuthenticated: () => {
+    return localStorage.getItem("isAuthenticated") === "true";
+  },
+
+  getCurrentUser: () => {
+    const userStr = localStorage.getItem("user");
+    return userStr ? JSON.parse(userStr) : null;
+  },
+
+  getToken: () => {
+    return localStorage.getItem("app-token");
+  },
+
+  getRefreshToken: () => {
+    return localStorage.getItem("refresh-token");
+  }
+};

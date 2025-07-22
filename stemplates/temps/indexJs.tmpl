@@ -1,0 +1,6 @@
+
+export { api } from './client';
+export { statsService } from './statsService';
+{{- range .Models}}
+export { {{.LowerName}}Service } from './{{.LowerName}}Service';
+{{- end }}
