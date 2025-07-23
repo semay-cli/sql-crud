@@ -118,7 +118,8 @@ func (s *AppDatabaseService) Get{{.ParentName}}{{.FieldName}}s(ctx context.Conte
 	}
 
 	_ = pagination.Validate()
-	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{.LowerParentName}}_id).Order("id asc").Limit(int(pagination.Size)).Offset(int(pagination.Page - 1)).Scan(&{{.LowerFieldName}}s).Error
+	offset := int((pagination.Page - 1) * pagination.Size)
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{.LowerParentName}}_id).Order("{{.LowerFieldName}}s.id asc").Limit(int(pagination.Size)).Offset(offset).Scan(&{{.LowerFieldName}}s).Error
 	if err != nil {
 		return  nil,0, fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
 	}
@@ -130,8 +131,10 @@ func (s *AppDatabaseService) Get{{.ParentName}}{{.FieldName}}s(ctx context.Conte
 	if err != nil {
 		return nil, 0, err
 	}
-	
-	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{.LowerParentName}}_id).Order("id asc").Limit(int(pagination.Size)).Offset(pagination.Page-1).Scan(&{{.LowerFieldName}}s).Error
+
+	_ = pagination.Validate()
+	offset := int((pagination.Page - 1) * pagination.Size)
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{.LowerParentName}}_id).Order("{{.LowerFieldName}}s.id asc").Limit(int(pagination.Size)).Offset(offset).Scan(&{{.LowerFieldName}}s).Error
 	if err != nil {
 		return nil, 0, err
 	}			
@@ -154,21 +157,21 @@ func (s *AppDatabaseService) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context
 	
 	{{- if  .MtM }}
 
-	join_string := "FULL JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id"
+	join_string := "LEFT JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id"
 	filter_string := "ur.{{.LowerParentName}}_id = ?"
 	
 
-	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{.LowerParentName}}_id).Order("id asc").Scan(&{{.LowerFieldName}}s).Error
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{.LowerParentName}}_id).Order("{{.LowerFieldName}}s.id asc").Scan(&{{.LowerFieldName}}s).Error
 	if err != nil {
 		return nil,fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
 	}
 	{{- end }}
 
 	{{- if .OtM}}
-	otm_string := "{{.LowerParentName}}_id = ?"
+	otm_string := "{{.LowerFieldName}}s.{{.LowerParentName}}_id = ?"
 	
 
-	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{.LowerParentName}}_id).Scan(&{{.LowerFieldName}}s).Error
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{.LowerParentName}}_id).Order("{{.LowerFieldName}}s.id asc").Scan(&{{.LowerFieldName}}s).Error
 	if err != nil {
 		return nil, err
 	}
@@ -190,21 +193,21 @@ func (s *AppDatabaseService) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseNam
 	
 	{{- if  .MtM }}
 
-	join_string := "FULL JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id AND ur.{{.LowerParentName}}_id = ?"
-	filter_string := "ur.{{.LowerParentName}}_id IS NULL"
+	join_string := "FULL JOIN {{.TableName}} ur ON {{.LowerFieldName}}s.id = ur.{{.LowerFieldName}}_id"
+	filter_string := "ur.{{.LowerParentName}}_id != ? OR  ur.{{.LowerParentName}}_id IS NULL"
 	
 
-	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{.LowerParentName}}_id).Order("id asc").Scan(&{{.LowerFieldName}}s).Error
+	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string,{{.LowerParentName}}_id).Order("{{.LowerFieldName}}s.id asc").Scan(&{{.LowerFieldName}}s).Error
 	if err != nil {
 		return  nil,fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
 	}
 	{{- end }}
 
 	{{- if .OtM}}
-	otm_string := "{{.LowerParentName}}_id = ?"
+	otm_string := "{{.LowerFieldName}}s.{{.LowerParentName}}_id IS NULL  OR {{.LowerFieldName}}s.{{.LowerParentName}}_id != ?"
 	
 
-	err= s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{.LowerParentName}}_id).Scan(&{{.LowerFieldName}}s).Error
+	err= s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Where(otm_string, {{.LowerParentName}}_id).Order("{{.LowerFieldName}}s.id asc").Scan(&{{.LowerFieldName}}s).Error
 	if err != nil {
 		return nil, err
 	}	

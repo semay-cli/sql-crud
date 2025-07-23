@@ -77,7 +77,7 @@ func InstallSSOhApp(userName, projectName, authAppName string) {
 
 	generate.GenerateTasks(stemplates.RenderData)
 	generate.GenerateConfigTestEnv(stemplates.RenderData)
-	generate.GenerateEchoCoverage(stemplates.RenderData)
+	// generate.GenerateEchoCoverage(stemplates.RenderData)
 
 	generate.GenerateUtilsApp(stemplates.ProjectSettings)
 	generate.GenerateModels(stemplates.RenderData)

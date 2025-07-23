@@ -22,7 +22,7 @@ import (
 // Add {{.FieldName}} to {{.ParentName}}
 // @Summary Add {{.ParentName}} to {{.FieldName}}
 // @Description Add {{.FieldName}} {{.ParentName}}
-// @Tags {{.FieldName}}{{.ParentName}}s
+// @Tags {{.ParentName}}{{.FieldName}}s
 // @Security ApiKeyAuth
 // @Accept json
 // @Produce json
@@ -61,7 +61,7 @@ func Add{{.FieldName}}To{{.ParentName}}(contx echo.Context) error {
 // Delete {{.FieldName}} from {{.ParentName}}
 // @Summary Delete {{.FieldName}}
 // @Description Delete {{.FieldName}} {{.ParentName}}
-// @Tags {{.FieldName}}{{.ParentName}}s
+// @Tags {{.ParentName}}{{.FieldName}}s
 // @Security ApiKeyAuth
 // @Accept json
 // @Produce json
@@ -103,7 +103,7 @@ func Delete{{.FieldName}}From{{.ParentName}}(contx echo.Context) error {
 // Get {{.FieldName}}s of {{.ParentName}}
 // @Summary Get {{.ParentName}} to {{.FieldName}}
 // @Description Get {{.FieldName}} {{.ParentName}}
-// @Tags {{.FieldName}}{{.ParentName}}s
+// @Tags {{.ParentName}}{{.FieldName}}s
 // @Security ApiKeyAuth
 // @Accept json
 // @Produce json
@@ -134,7 +134,7 @@ func Get{{.FieldName}}sOf{{.ParentName}}s(contx echo.Context) error {
 
     // Prepare pagination model
 	pagination := models.Pagination{
-		Page:   Page - 1, // assuming pages are 0-indexed in backend
+		Page:   Page,
 		Size:   Limit,
 	}
 
@@ -168,7 +168,7 @@ func Get{{.FieldName}}sOf{{.ParentName}}s(contx echo.Context) error {
 // Get {{.FieldName}}s of {{.ParentName}} Complement
 // @Summary Get {{.ParentName}} to {{.FieldName}} Complement
 // @Description Get {{.FieldName}} {{.ParentName}} Complement
-// @Tags {{.FieldName}}{{.ParentName}}s
+// @Tags {{.ParentName}}{{.FieldName}}s
 // @Security ApiKeyAuth
 // @Accept json
 // @Produce json
@@ -204,7 +204,7 @@ func GetAll{{.FieldName}}sOf{{.ParentName}}s(contx echo.Context) error {
 // Get {{.FieldName}}s of {{.ParentName}} Not Complement
 // @Summary Get {{.ParentName}} to {{.FieldName}} Not Complement
 // @Description Get {{.FieldName}} {{.ParentName}} Not Complement
-// @Tags {{.FieldName}}{{.ParentName}}s
+// @Tags {{.ParentName}}{{.FieldName}}s
 // @Security ApiKeyAuth
 // @Accept json
 // @Produce json

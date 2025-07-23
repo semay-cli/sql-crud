@@ -69,7 +69,7 @@ func Get{{.Name}}s(contx echo.Context) error {
 
 	// Prepare pagination model
 	pagination := models.Pagination{
-		Page:   Page - 1, // assuming pages are 0-indexed in backend
+		Page:   Page,
 		Size:   Limit,
 	}
 

@@ -104,7 +104,7 @@ func (s *AppDatabaseService) GetOne{{.Name}}(ctx context.Context, id string) (*m
 }
 
 // Get returns {{.LowerName}}s with paginatoin and search
-func (s *AppDatabaseService) Get{{.Name}}s(ctx context.Context, paginatoin models.Pagination, searchTerm map[string]any) ([]models.{{.Name}}Get, uint, error) {
+func (s *AppDatabaseService) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]any) ([]models.{{.Name}}Get, uint, error) {
 
 	// Build search query if any
 	// Create a base query
@@ -144,8 +144,9 @@ func (s *AppDatabaseService) Get{{.Name}}s(ctx context.Context, paginatoin model
 
 
 	var {{.LowerName}}s []models.{{.Name}}Get
-	_ = paginatoin.Validate()
-	result := query.WithContext(ctx).Order("id asc").Limit(int(paginatoin.Size)).Offset(paginatoin.Page-1).Scan(&{{.LowerName}}s)
+	_ = pagination.Validate()
+	offset := int((pagination.Page - 1) * pagination.Size)
+	result := query.WithContext(ctx).Order("id asc").Limit(int(pagination.Size)).Offset(offset).Scan(&{{.LowerName}}s)
 	if result.Error != nil {
 		return nil, 0, result.Error
 	}
