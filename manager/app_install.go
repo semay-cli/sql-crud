@@ -13,8 +13,8 @@ import (
 var (
 	appinstallcli = &cobra.Command{
 		Use:   "ui",
-		Short: "Create React Django Admin UI dist files",
-		Long:  `Create React Django Admin UI dist files`,
+		Short: "Create React SSO Admin UI dist files",
+		Long:  `Create React SSO Admin UI dist files`,
 		Run: func(cmd *cobra.Command, args []string) {
 			stemplates.InitProjectJSON()
 			if stemplates.ProjectSettings.AuthAppType == "sso" {

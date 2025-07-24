@@ -202,7 +202,7 @@ func init() {
 	initalizemodule.Flags().StringP("name", "n", "", "Specify the module name  (github.com/someuser/someproject)")
 	initalizemodule.Flags().StringP("app", "a", "", "Specify the application name  like auth-app,hrm-app")
 	initalizemodule.Flags().StringP("auth", "p", "", "Specify the authentication application name  defaults to admin_app")
-	initalizemodule.Flags().StringP("type", "t", "", "specify if you are using standalone authentication like django admin or sso like solution")
+	initalizemodule.Flags().StringP("type", "t", "", "specify if you are using sso (keycloak)like solution")
 
 	// Register flags for the 'basic' command
 	basicCommand.Flags().StringP("type", "t", "", "Specify the type of folder structure to generate: db, logs, tasks,service,tracer,config,migrate,api")
