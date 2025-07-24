@@ -31,10 +31,17 @@ var (
 					fmt.Printf("Error loading data: %v\n", err)
 					return
 				}
+
 				// generate.GenerateFiberAppMiddleware(stemplates.RenderData)
+				stemplates.ProjectSettings.CurrentAppName = appName
+				stemplates.RenderData.CurrentAppName = appName
+				stemplates.RenderData.AuthAppName = stemplates.ProjectSettings.AuthAppName
 				generate.GenerateEchoAppMiddleware(stemplates.RenderData)
 				generate.GenerateEchoSetup(stemplates.RenderData)
-				stemplates.ProjectSettings.CurrentAppName = appName
+				if stemplates.ProjectSettings.AuthAppName == appName {
+					generate.GenerateUtilsApp(stemplates.ProjectSettings)
+					generate.GenerateSSOLogin(stemplates.ProjectSettings)
+				}
 
 			} else if globalName {
 				generate.GenerateGlobalEchoAppMiddleware(stemplates.RenderData)

@@ -40,6 +40,7 @@ type Data struct {
 	AuthAppName    string   `json:"auth_app_name"`
 	AuthAppType    string   `json:"auth_app_Type"`
 	Frame          string   `json:"frame"`
+	CurrentAppName string   `json:"current_app_name"`
 }
 
 // ProjectSetting contains project configuration.

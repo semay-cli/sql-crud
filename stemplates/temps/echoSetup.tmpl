@@ -42,6 +42,11 @@ func SetupRoutes(app *echo.Echo) {
 	// the Otel spanner middleware
 	gapp.Use(otelechospanstarter)
 
+	{{ if eq .AuthAppName .CurrentAppName }}
+	gapp.POST("/login", controllers.Login).Name = "login"
+	gapp.GET("/user/details", controllers.GetUserDetails).Name = "user_details"
+	{{- end}}
+
 	{{- range .Models}}
 	gapp.GET("/{{.LowerName}}", controllers.Get{{.Name}}s).Name = "{{.AppName | replaceString}}_can_view_{{.LowerName}}"
 	gapp.GET("/{{.LowerName}}/:{{.LowerName}}_id", controllers.Get{{.Name}}ByID).Name = "{{.AppName | replaceString}}_can_view_{{.LowerName}}"

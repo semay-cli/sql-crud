@@ -90,6 +90,17 @@ func echo_run(env string) {
 	// Mounting Global Middleware
 	MountGlobalMiddleware(app)
 
+	{{- if eq .AuthAppType  "sso" }}
+	// Serve static files from the "dist/django_admin_ui" folder
+	app.Static("/", "./dist/sso_admin_ui")
+
+	// Handle "/admin/*" route and send the "index.html" file
+	app.GET("/admin/*", func(c echo.Context) error {
+		return c.File("./dist/sso_admin_ui/index.html")
+	}).Name = "Admin_UI"
+
+	{{- end }}
+
 	// OpenAPI documentation
 	{{- range .AppNames}}
 	//  {{ . }} Swagger Docs

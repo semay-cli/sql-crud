@@ -1,0 +1,187 @@
+package controllers
+
+import (
+	"net/http"
+    "strings"
+
+	{{- if eq .AuthAppName .CurrentAppName }}
+	"time"
+	
+
+	"{{.ProjectName}}/{{ .CurrentAppName}}/models"
+	"{{.ProjectName}}/{{ .CurrentAppName}}/services"
+
+	{{- end }}
+	"{{.ProjectName}}/common"
+	"{{.ProjectName}}/observe"
+	validator "github.com/go-playground/validator/v10"
+	"github.com/labstack/echo/v4"
+)
+
+{{- if eq .AuthAppName .CurrentAppName }}
+// Login Request for Endpoint
+type LoginPost struct {
+	GrantType string {{.BackTick}}json:"grant_type" validate:"required" example:"authorization_code,refresh_token,token_decode"{{.BackTick}}
+	Email     string {{.BackTick}}json:"email" validate:"email,min=6,max=32"{{.BackTick}}
+	Password  string {{.BackTick}}json:"password"{{.BackTick}}
+	Token     string {{.BackTick}}json:"token"{{.BackTick}}
+}
+
+// Access token Response
+type TokenResponse struct {
+	AccessToken  string {{.BackTick}}json:"access_token"{{.BackTick}}
+	RefreshToken string {{.BackTick}}json:"refresh_token"{{.BackTick}}
+	TokenType    string {{.BackTick}}json:"token_type"{{.BackTick}}
+}
+
+{{ if eq .AuthAppType "sso" }}
+// @ID login
+// @Summary Auth
+// @Description Login
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param user body LoginPost true "Login"
+// @Success 202 {object} common.ResponseHTTP{data=TokenResponse{}}
+// @Failure 404 {object} common.ResponseHTTP{}
+// @Failure 503 {object} common.ResponseHTTP{}
+// @Router /{{.CurrentAppName | replaceString}}/login [post]
+func Login(contx echo.Context) error {
+	//  Geting tracer
+	tracer := contx.Get("tracer").(*observe.RouteTracer)
+
+	// validator initialization
+	validate := validator.New()
+
+	//validating post data
+	login_request := new(LoginPost)
+
+	//first parse request data
+	if err := contx.Bind(&login_request); err != nil {
+
+		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
+			Success: false,
+			Message: err.Error(),
+			Data:    nil,
+		})
+	}
+
+	// then validate structure
+	if err := validate.Struct(login_request); err != nil {
+		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
+			Success: false,
+			Message: err.Error(),
+			Data:    nil,
+		})
+	}
+    service := services.AppService
+	switch login_request.GrantType {
+	case "authorization_code":
+		token, err := service.Login(login_request.Email, login_request.Password)
+		if err != nil {
+			return contx.JSON(http.StatusUnauthorized, common.ResponseHTTP{
+				Success: false,
+				Message: err.Error(),
+				Data:    nil,
+			})
+		}
+		claims, _ := services.ParseJWTToken(token)
+		accessString := token
+		refreshString, _ := services.CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 65)
+		data := TokenResponse{
+			AccessToken:  accessString,
+			RefreshToken: refreshString,
+			TokenType:    "Bearer",
+		}
+		// Optionally update last login
+		service.DB.WithContext(tracer.Tracer).Model(&models.User{}).Where("id = ?", claims.UserID).Update("last_login", time.Now())
+		return contx.JSON(http.StatusAccepted, common.ResponseHTTP{
+			Success: true,
+			Message: "Authorization Granted",
+			Data:    data,
+		})
+	case "refresh_token":
+		newToken, err := service.RefreshToken(login_request.Token)
+		if err != nil {
+			return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
+				Success: false,
+				Message: err.Error(),
+				Data:    nil,
+			})
+		}
+		claims, _ := services.ParseJWTToken(newToken)
+		refreshString, _ := services.CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 65)
+		data := TokenResponse{
+			AccessToken:  newToken,
+			RefreshToken: refreshString,
+			TokenType:    "Bearer",
+		}
+		return contx.JSON(http.StatusAccepted, common.ResponseHTTP{
+			Success: true,
+			Message: "Token refreshed",
+			Data:    data,
+		})
+	case "token_decode":
+		claims, err := service.DecodeToken(login_request.Token)
+		if err != nil {
+			return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
+				Success: false,
+				Message: err.Error(),
+				Data:    nil,
+			})
+		}
+		return contx.JSON(http.StatusAccepted, common.ResponseHTTP{
+			Success: true,
+			Message: "Token decode successful",
+			Data:    claims,
+		})
+	default:
+		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
+			Success: false,
+			Message: "Unknown grant type",
+			Data:    nil,
+		})
+	}
+}
+
+
+
+// Get User Details
+// @Summary Get current user details
+// @Description Returns authenticated user details, groups, and scopes
+// @Tags Authentication
+// @Security ApiKeyAuth
+// @Produce json
+// @Success 200 {object} common.ResponseHTTP{data=map[string]interface{}}
+// @Failure 401 {object} common.ResponseHTTP
+// @Failure 500 {object} common.ResponseHTTP
+// @Router /{{.CurrentAppName | replaceString}}/user/details [get]
+func GetUserDetails(contx echo.Context) error {
+	authHeader := contx.Request().Header.Get("X-APP-TOKEN")
+	if authHeader == "" {
+		return contx.JSON(http.StatusUnauthorized, common.ResponseHTTP{
+			Success: false,
+			Message: "missing authorization header",
+		})
+	}
+
+	// Strip "Bearer " from the header
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	
+	userDetails, err := services.AppService.GetUserDetails(tokenString)
+	if err != nil {
+		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
+			Success: false,
+			Message: err.Error(),
+		})
+	}
+
+	return contx.JSON(http.StatusOK, common.ResponseHTTP{
+		Success: true,
+		Message: "User details fetched successfully",
+		Data:    userDetails,
+	})
+}
+
+{{- end }}
+{{- end }}

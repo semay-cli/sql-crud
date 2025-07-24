@@ -1,0 +1,80 @@
+package services
+
+import (
+	"fmt"
+
+	"{{.ProjectName}}/{{ .CurrentAppName}}/models"
+	)
+
+func (s *AppDatabaseService) Login(email, password string) (string, error) {
+	var user models.User
+	if err := s.DB.Where("email = ?", email).First(&user).Error; err != nil {
+		return "", fmt.Errorf("user not found: %w", err)
+	}
+
+	if !PasswordsMatch(user.Password, password) {
+		return "", fmt.Errorf("invalid credentials")
+	}
+
+	permissions := []string{"read", "write"} // Example permissions
+	groups := []string{"admin", "user"}      // Example groups
+	token, err := CreateJWTToken(user, permissions, groups, 60)
+	if err != nil {
+		return "", fmt.Errorf("error creating token: %w", err)
+	}
+
+	return token, nil
+}
+
+func (s *AppDatabaseService) DecodeToken(tokenString string) (UserClaim, error) {
+	claims, err := ParseJWTToken(tokenString)
+	if err != nil {
+		return UserClaim{}, fmt.Errorf("error parsing token: %w", err)
+	}
+	return claims, nil
+}
+
+func (s *AppDatabaseService) RefreshToken(tokenString string) (string, error) {
+	claims, err := s.DecodeToken(tokenString)
+	if err != nil {
+		return "", err
+	}
+
+	// Here you can add logic to check if the token is close to expiration
+	// and refresh it accordingly. For now, we will just create a new token.
+	newToken, err := CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 60)
+	if err != nil {
+		return "", fmt.Errorf("error refreshing token: %w", err)
+	}
+
+	return newToken, nil
+}
+
+
+func (s *AppDatabaseService) GetUserDetails(tokenString string) (map[string]interface{}, error) {
+	// Step 1: Decode the token to get claims
+	claims, err := s.DecodeToken(tokenString)
+	if err != nil {
+		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+
+	// Step 2: Fetch the user from the database
+	var user models.User
+	if err := s.DB.First(&user, claims.UserID).Error; err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	// Step 3: Structure the response
+	userDetails := map[string]interface{}{
+		"user": map[string]interface{}{
+			"id":    user.ID,
+			"name":  user.Username,
+			"email": user.Email,
+			// Add more user fields if needed
+		},
+		"groups": claims.Groups,
+		"scopes": claims.Scopes,
+	}
+
+	return userDetails, nil
+}

@@ -1,4 +1,4 @@
-package utils
+package services
 
 import (
 	"fmt"
@@ -35,7 +35,7 @@ func PasswordsMatch(hashedPassword, currPassword string) bool {
 
 // source of this token encode decode functions
 // https://github.com/gurleensethi/go-jwt-tutorial/blob/main/main.go
-func CreateJWTToken(user models.User, permissions, groups []string, duration int) (string, error) {
+func CreateJWTToken(user models.User, scopes, groups []string, duration int) (string, error) {
 	my_claim := UserClaim{
 		RegisteredClaims: jwt.RegisteredClaims{},
 		Email:            user.Email,
@@ -45,7 +45,7 @@ func CreateJWTToken(user models.User, permissions, groups []string, duration int
 		Permissions:      permissions,
 		{{- end }}
 		{{- if eq .AuthAppType "sso" }}
-		Scopes:      permissions,
+		Scopes:      scopes,
 		UUID:             user.UUID,
 		{{- end }}
 		Groups:           groups,
