@@ -1,7 +1,7 @@
 package generate
 
 import (
-	"github.com/bushubdegefu/sql-crud/stemplates"
+	"github.com/semay-cli/sql-crud/stemplates"
 )
 
 func GitFrame(data stemplates.Data) {

@@ -1,6 +1,6 @@
 package main
 
-import "github.com/bushubdegefu/sql-crud/manager"
+import "github.com/semay-cli/sql-crud/manager"
 
 func main() {
 	manager.Execute()

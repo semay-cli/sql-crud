@@ -1,6 +1,6 @@
 package generate
 
-import "github.com/bushubdegefu/sql-crud/stemplates"
+import "github.com/semay-cli/sql-crud/stemplates"
 
 func GenerateDjangoAuth(data stemplates.Data) {
 	tmpl := stemplates.LoadTemplate("django")

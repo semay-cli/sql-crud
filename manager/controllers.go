@@ -3,8 +3,8 @@ package manager
 import (
 	"fmt"
 
-	"github.com/bushubdegefu/sql-crud/generate"
-	"github.com/bushubdegefu/sql-crud/stemplates"
+	"github.com/semay-cli/sql-crud/generate"
+	"github.com/semay-cli/sql-crud/stemplates"
 	"github.com/spf13/cobra"
 )
 

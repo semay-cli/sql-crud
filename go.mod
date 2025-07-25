@@ -1,4 +1,4 @@
-module github.com/bushubdegefu/sql-crud
+module github.com/semay-cli/sql-crud
 
 go 1.24.4
 

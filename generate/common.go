@@ -3,7 +3,7 @@ package generate
 import (
 	"os"
 
-	"github.com/bushubdegefu/sql-crud/stemplates"
+	"github.com/semay-cli/sql-crud/stemplates"
 )
 
 func GenerateCommon(data stemplates.Data) {

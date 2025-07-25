@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bushubdegefu/sql-crud/stemplates"
+	"github.com/semay-cli/sql-crud/stemplates"
 )
 
 func GenerateServices(data stemplates.Data) {

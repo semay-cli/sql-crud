@@ -152,7 +152,7 @@ This file serves as the **main input metadata** for the SQL-CRUD CLI tool. It de
 
 ```json
 {
-  "project_name": "github.com/bushubdegefu/sql-play",
+  "project_name": "github.com/semay-cli/sql-play",
   "app_names": [
     "blue-admin"
   ],
@@ -183,7 +183,7 @@ Each application module (e.g., `blue-admin`, `crm`) has its own `config.json` fi
 #### 📄 Sample `config.json`
 ```json
 {
-  "project_name": "github.com/bushubdegefu/sql-play",
+  "project_name": "github.com/semay-cli/sql-play",
   "app_name": "blue-admin",
   "models": [
     {

@@ -1,6 +1,6 @@
 package generate
 
-import "github.com/bushubdegefu/sql-crud/stemplates"
+import "github.com/semay-cli/sql-crud/stemplates"
 
 func GenerateSSOLogin(data stemplates.ProjectSetting) {
 	tmplService := stemplates.LoadTemplate("loginService")

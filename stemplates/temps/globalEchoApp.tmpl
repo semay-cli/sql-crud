@@ -19,7 +19,7 @@ import (
 	"github.com/madflojo/tasks"
 	"github.com/spf13/cobra"
 	"golang.org/x/time/rate"
-	echoSwagger "github.com/bushubdegefu/echo-swagger"
+	echoSwagger "github.com/semay-cli/echo-swagger"
 
 	{{- range .AppNames}}
 	{{ . | replaceString }}_tasks "{{$.ProjectName}}/{{ . }}/scheduler"
