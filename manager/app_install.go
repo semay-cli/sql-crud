@@ -24,17 +24,14 @@ var (
 	}
 
 	installauthcli = &cobra.Command{
-		Use:   "auth",
+		Use:   "install",
 		Short: "Install Authentication Managment App With the UI",
 		Long:  `Install Authentication Managment App With the UI`,
 		Run: func(cmd *cobra.Command, args []string) {
 			authAppName, _ := cmd.Flags().GetString("app")
 			projectName, _ := cmd.Flags().GetString("project")
 			userName, _ := cmd.Flags().GetString("user")
-			authType, _ := cmd.Flags().GetString("sso")
-			if authType == "sso" {
-				InstallSSOhApp(userName, projectName, authAppName)
-			}
+			InstallSSOhApp(userName, projectName, authAppName)
 
 			runSwagInitForApps()
 			stemplates.CommonCMDInit()
@@ -63,6 +60,7 @@ func InstallSSOhApp(userName, projectName, authAppName string) {
 	generate.GenerateLogs(stemplates.RenderData)
 	generate.GenerateCommon(stemplates.RenderData)
 	generate.GenerateDBConn(stemplates.ProjectSettings)
+	generate.GenerateCacheService(stemplates.ProjectSettings)
 	generate.GenerateTracerEchoSetup(stemplates.RenderData)
 
 	currentDir, _ := os.Getwd()
@@ -79,9 +77,15 @@ func InstallSSOhApp(userName, projectName, authAppName string) {
 	generate.GenerateConfigTestEnv(stemplates.RenderData)
 	generate.GenerateEchoCoverage(stemplates.RenderData)
 
-	generate.GenerateUtilsApp(stemplates.ProjectSettings)
 	generate.GenerateModels(stemplates.RenderData)
+	generate.GenerateUtilsApp(stemplates.ProjectSettings)
+	generate.GenerateServicesInit(stemplates.RenderData)
+	generate.GenerateServices(stemplates.RenderData)
+	generate.GenerateControllers(stemplates.RenderData)
+	generate.GenerateSSOLogin(stemplates.ProjectSettings)
 
+	stemplates.ProjectSettings.CurrentAppName = authAppName
+	stemplates.ProjectSettings.AuthAppName = authAppName
 	generate.GenerateEchoAppMiddleware(stemplates.RenderData)
 	generate.GenerateEchoSetup(stemplates.RenderData)
 
@@ -104,11 +108,9 @@ func InstallSSOhApp(userName, projectName, authAppName string) {
 }
 
 func init() {
-	installauthcli.Flags().StringP("frame", "f", "", "Specify the framework for the template (echo or fiber)")
 	installauthcli.Flags().StringP("project", "p", "", "Specify the project name using the app flag")
 	installauthcli.Flags().StringP("app", "a", "", "Specify the app name using the app flag")
 	installauthcli.Flags().StringP("user", "u", "", "Specify the githubrepo user name using the user flag")
-	installauthcli.Flags().StringP("sso", "s", "", "Specify the authentication app type sso or standalone")
 	goFrame.AddCommand(appinstallcli)
 	goFrame.AddCommand(installauthcli)
 }

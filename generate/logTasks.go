@@ -8,11 +8,11 @@ import (
 
 func GenerateTasks(data stemplates.Data) {
 	tmpl := stemplates.LoadTemplate("tasks")
-	err := os.MkdirAll("bluetasks", os.ModePerm)
+	err := os.MkdirAll("scheduler", os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
-	stemplates.WriteTemplateToFile("bluetasks/tasks.go", tmpl, data)
+	stemplates.WriteTemplateToFile("scheduler/tasks.go", tmpl, data)
 }
 
 func GenerateLogs(data stemplates.Data) {

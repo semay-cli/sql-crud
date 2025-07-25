@@ -3,6 +3,7 @@ package observe
 import (
 	"context"
 	"fmt"
+    "strconv"
 	"strings"
 
 
@@ -32,9 +33,16 @@ func InitTracer() *sdktrace.TracerProvider {
         semconv.ServiceNameKey.String(configs.AppConfig.Get("APP_NAME")),
     )
 
+    
+    // Use TraceIDRatioBased for random sampling (10% here) if env not set
+	sample_size, _ := strconv.ParseFloat(configs.AppConfig.GetOrDefault("TRACER_SAMPLE", "0.1"), 32)
+	sampler := sdktrace.ParentBased(sdktrace.TraceIDRatioBased(sample_size))
+
+
     // Create TracerProvider
     tp := sdktrace.NewTracerProvider(
         sdktrace.WithResource(res),
+        sdktrace.WithSampler(sampler),
     )
 
     // Set global tracer provider and propagator

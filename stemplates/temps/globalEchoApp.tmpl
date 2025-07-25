@@ -22,7 +22,7 @@ import (
 	echoSwagger "github.com/bushubdegefu/echo-swagger"
 
 	{{- range .AppNames}}
-	{{ . | replaceString }}_tasks "{{$.ProjectName}}/{{ . }}/bluetasks"
+	{{ . | replaceString }}_tasks "{{$.ProjectName}}/{{ . }}/scheduler"
 	{{ . | replaceString }}_service "{{$.ProjectName}}/{{ . }}/services"
 	{{- end }}
 

@@ -12,31 +12,32 @@ func InitDatabase(test_flag bool) {
 	if !test_flag {
 		configs.NewEnvFile("./configs")
 	}
-	database, err  := database.ReturnSession("{{ .AppName | replaceString }}")
-	fmt.Println("Connection Opened to Database")
-	if err == nil {
-		if err := database.AutoMigrate(
-			{{- range .Models}}
-			&{{.Name}}{},
-			{{- end}}
-		); err != nil {
-			log.Fatalln(err)
-		}
-		fmt.Println("Database Migrated")
-	} else {
+	db, err  := database.ReturnSession("{{ .AppName | replaceString }}")
+	if err != nil {
 		panic(err)
 	}
+	fmt.Println("Connection Opened to Database")
+
+	if err := db.AutoMigrate(
+		{{- range .Models}}
+		&{{.Name}}{},
+		{{- end}}
+	); err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Println("Database Migrated")
+	
 }
 
 func CleanDatabase(test_flag bool) {
 	if !test_flag {
 		configs.NewEnvFile("./configs")
 	}
-	database, err := database.ReturnSession("{{ .AppName | replaceString }}")
+	db, err := database.ReturnSession("{{ .AppName | replaceString }}")
 	if err == nil {
 		fmt.Println("Connection Opened to Database")
 		fmt.Println("Dropping Models if Exist")
-		err := database.Migrator().DropTable(
+		err := db.Migrator().DropTable(
 		{{- range .Models}}
 			&{{.Name}}{},
 		{{- end}}

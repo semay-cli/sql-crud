@@ -5,6 +5,7 @@ import (
 	"fmt"
 	{{- range .AppNames}}
 	{{ . | replaceString }} "{{$.ProjectName}}/{{ . }}/models"
+	"{{$.ProjectName}}/configs"
 	{{- end }}
 	"github.com/spf13/cobra"
 )
@@ -16,7 +17,16 @@ var (
 		Long:  "Migrate to init database",
 		Run: func(cmd *cobra.Command, args []string) {
 			// Check for the type flag
-			migrateType, _ := cmd.Flags().GetString("app")
+			migrateType, _ := cmd.Flags().GetString("type")
+
+			env, _ := cmd.Flags().GetString("env")
+
+			// if enviroment variable not provided setting default to dev
+			if env == "" {
+				env = "dev"
+			}
+			configs.AppConfig.SetEnv(env)
+
 			switch migrateType {
 			case "create":
 				init_migrate()
@@ -92,6 +102,7 @@ func clean_database() {
 
 func init() {
 	{{.AppName | replaceString }}migrate.Flags().StringP("type", "t", "", "Specify create to \"create\" the models to database, and \"populate\" to populate default permissions and content types")
+	blue_adminmigrate.Flags().StringP("env", "e", "", "Specify which config .env file to load from \"dev\",\"prod\", ...")
 	goFrame.AddCommand({{.AppName | replaceString }}migrate)
 	goFrame.AddCommand({{.AppName | replaceString }}clean)
 	goFrame.AddCommand(createsuperuser)
