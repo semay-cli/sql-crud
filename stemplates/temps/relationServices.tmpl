@@ -53,6 +53,12 @@ func (s *AppDatabaseService) Add{{.ParentName}}To{{.FieldName}}(ctx context.Cont
 		return err
 	}
 
+	// Removing Cache if update sucess
+	cacheKey_all := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
+	cacheKey_none := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
+	AppCacheService.Delete(cacheKey_all)
+	AppCacheService.Delete(cacheKey_none)
+
 	
 	return nil
 }
@@ -91,6 +97,12 @@ func (s *AppDatabaseService) Remove{{ .ParentName}}From{{.FieldName}}(ctx contex
 	if err != nil {
 		return err
 	}
+
+	// Removing Cache if update sucess
+	cacheKey_all := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
+	cacheKey_none := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
+	AppCacheService.Delete(cacheKey_all)
+	AppCacheService.Delete(cacheKey_none)
 
 	
 	return nil
@@ -154,6 +166,14 @@ func (s *AppDatabaseService) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context
 	}
 	// results var
 	var {{.LowerFieldName}}s []models.{{.FieldName}}
+
+
+	 // checking Cache if it exists
+   	cacheKey := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
+	if cached{{.FieldName}}, found := AppCacheService.Get(cacheKey); found {
+		return cached{{.FieldName}}.([]models.{{.FieldName}}), nil
+	}
+	
 	
 	{{- if  .MtM }}
 
@@ -179,6 +199,11 @@ func (s *AppDatabaseService) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context
 
 	{{- end}}
 
+
+	// Setting Cache before returning the user
+    AppCacheService.Set(cacheKey, &{{.LowerFieldName}}s)
+
+
 	return {{.LowerFieldName}}s, nil
 }
 
@@ -190,6 +215,13 @@ func (s *AppDatabaseService) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseNam
 	}
 	// results var
 	var {{.LowerFieldName}}s []models.{{.FieldName}}
+
+	 // checking Cache if it exists
+   	cacheKey := "{{.ParentName}}_{{.FieldName}}_none:" + {{.ParentName | toLowerCaseName}}ID
+	if cached{{.FieldName}}, found := AppCacheService.Get(cacheKey); found {
+		return cached{{.FieldName}}.([]models.{{.FieldName}}), nil
+	}
+	
 	
 	{{- if  .MtM }}
 
@@ -213,6 +245,9 @@ func (s *AppDatabaseService) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseNam
 	}	
 
 	{{- end}}
+
+	// Setting Cache before returning the user
+    AppCacheService.Set(cacheKey, &{{.LowerFieldName}}s)
 
 	return {{.LowerFieldName}}s, nil
 }
