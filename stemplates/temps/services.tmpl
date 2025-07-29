@@ -58,7 +58,7 @@ func (s *AppDatabaseService) Create{{.Name}}(ctx context.Context, posted_{{.Lowe
 
 			err := tx.Create(&{{.LowerName}}).Error
 			if err != nil {
-				return fmt.Errorf("{{.LowerName}} creatoin failed: %w", err)
+				return fmt.Errorf("{{.LowerName}} creatoin failed: %v", err)
 			}
 
             // copier.Copy(created{{.Name}} , {{.LowerName}})
@@ -85,7 +85,7 @@ func (s *AppDatabaseService) GetOne{{.Name}}(ctx context.Context, id string) (*m
 
 	objID, err := strconv.Atoi(id)
 	if err != nil {
-		return nil, fmt.Errorf("invalid ID: %w", err)
+		return nil, fmt.Errorf("invalid ID: %v", err)
 	}
 
 	var {{.LowerName}} models.{{.Name}}Get
@@ -165,7 +165,7 @@ func (s *AppDatabaseService) Update{{.Name}}(ctx context.Context, patch_{{.Lower
 
 	{{.LowerName}}_id, err := strconv.Atoi(id)
 	if err != nil {
-		return &models.{{.Name}}Get{},fmt.Errorf("invalid ID: %w", err)
+		return &models.{{.Name}}Get{},fmt.Errorf("invalid ID: %v", err)
 	}
 
 	err = s.withTransaction(ctx, func(tx *gorm.DB) error {
@@ -193,7 +193,7 @@ func (s *AppDatabaseService) Update{{.Name}}(ctx context.Context, patch_{{.Lower
 			// Update the document by ID
 			result := s.DB.WithContext(ctx).Model(&models.{{.Name}}{}).Where("id= ?", {{.LowerName}}_id).Updates(updateFields)
 			if result.Error != nil {
-			return fmt.Errorf("update failed: %w", result.Error)
+			return fmt.Errorf("update failed: %v", result.Error)
 			}
 
 			if result.RowsAffected == 0 {
@@ -217,7 +217,7 @@ func (s *AppDatabaseService) Delete{{.Name}}(ctx context.Context, id string) err
 	err := s.withTransaction(ctx, func(tx *gorm.DB) error {
 		objID, err := strconv.Atoi(id)
 		if err != nil {
-			return fmt.Errorf("invalid ID: %w", err)
+			return fmt.Errorf("invalid ID: %v", err)
 		}
 		var {{.LowerName}} models.{{.Name}}
 		err = s.DB.WithContext(ctx).Where("id = ?", objID).First(&{{.LowerName}}).Delete(&{{.LowerName}}).Error

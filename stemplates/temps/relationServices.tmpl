@@ -26,7 +26,7 @@ func (s *AppDatabaseService) Add{{.ParentName}}To{{.FieldName}}(ctx context.Cont
 	}
 
 	if res := s.DB.WithContext(ctx).First(&{{.LowerParentName}}, {{.LowerParentName}}_id); res.Error != nil {
-		return fmt.Errorf("{{.ParentName}} not found: %w", res.Error)
+		return fmt.Errorf("{{.LowerParentName}} not found: %v", res.Error)
 		
 	}
 
@@ -38,13 +38,13 @@ func (s *AppDatabaseService) Add{{.ParentName}}To{{.FieldName}}(ctx context.Cont
 
 	// Fetching
 	if res := s.DB.WithContext(ctx).First(&{{.LowerFieldName}}, {{.LowerFieldName}}_id); res.Error != nil {
-		return fmt.Errorf("{{.FieldName}} not found: %w", res.Error)
+		return fmt.Errorf("{{.LowerFieldName}} not found: %v", res.Error)
 	}
 	
 	err= s.withTransaction(ctx, func(tx *gorm.DB) error {
 		
 		if err := tx.Model(&{{.LowerParentName}}).Association("{{.FieldName}}s").Append(&{{.LowerFieldName}}); err != nil {
-			return fmt.Errorf("failed to associate add relation: %w", err)
+			return fmt.Errorf("failed to associate add relation: %v", err)
 		}
 		return nil
 	})
@@ -55,7 +55,7 @@ func (s *AppDatabaseService) Add{{.ParentName}}To{{.FieldName}}(ctx context.Cont
 
 	// Removing Cache if update sucess
 	cacheKey_all := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
-	cacheKey_none := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
+	cacheKey_none := "{{.ParentName}}_{{.FieldName}}_none:" + {{.ParentName | toLowerCaseName}}ID
 	AppCacheService.Delete(cacheKey_all)
 	AppCacheService.Delete(cacheKey_none)
 
@@ -72,7 +72,7 @@ func (s *AppDatabaseService) Remove{{ .ParentName}}From{{.FieldName}}(ctx contex
 	}
 
 	if res := s.DB.WithContext(ctx).First(&{{.LowerParentName}}, {{.LowerParentName}}_id); res.Error != nil {
-		return fmt.Errorf("{{.ParentName}} not found: %w", res.Error)
+		return fmt.Errorf("{{.LowerParentName}} not found: %v", res.Error)
 		
 	}
 
@@ -84,12 +84,12 @@ func (s *AppDatabaseService) Remove{{ .ParentName}}From{{.FieldName}}(ctx contex
 
 	// Fetching
 	if res := s.DB.WithContext(ctx).First(&{{.LowerFieldName}}, {{.LowerFieldName}}_id); res.Error != nil {
-		return fmt.Errorf("{{.FieldName}} not found: %w", res.Error)
+		return fmt.Errorf("{{.LowerFieldName}} not found: %v", res.Error.Error())
 	}
 	
 	err = s.withTransaction(ctx, func(tx *gorm.DB) error {
 		if err := tx.Model(&{{.LowerParentName}}).Association("{{.FieldName}}s").Delete(&{{.LowerFieldName}}); err != nil {
-			return fmt.Errorf("failed to remove relation: %w", err)
+			return fmt.Errorf("failed to remove relation: %v", err)
 		}
 		return nil
 	})
@@ -100,7 +100,7 @@ func (s *AppDatabaseService) Remove{{ .ParentName}}From{{.FieldName}}(ctx contex
 
 	// Removing Cache if update sucess
 	cacheKey_all := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
-	cacheKey_none := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
+	cacheKey_none := "{{.ParentName}}_{{.FieldName}}_none:" + {{.ParentName | toLowerCaseName}}ID
 	AppCacheService.Delete(cacheKey_all)
 	AppCacheService.Delete(cacheKey_none)
 
@@ -112,7 +112,7 @@ func (s *AppDatabaseService) Remove{{ .ParentName}}From{{.FieldName}}(ctx contex
 func (s *AppDatabaseService) Get{{.ParentName}}{{.FieldName}}s(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, pagination models.Pagination) ([]models.{{.FieldName}}, uint, error) {
 	{{.ParentName | toLowerCaseName}}_id, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
 	if err != nil {
-		return  nil,0,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %w", err)
+		return  nil,0,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
 	}
 	// results var
 	var {{.LowerFieldName}}s []models.{{.FieldName}}
@@ -133,7 +133,7 @@ func (s *AppDatabaseService) Get{{.ParentName}}{{.FieldName}}s(ctx context.Conte
 	offset := int((pagination.Page - 1) * pagination.Size)
 	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{.LowerParentName}}_id).Order("{{.LowerFieldName}}s.id asc").Limit(int(pagination.Size)).Offset(offset).Scan(&{{.LowerFieldName}}s).Error
 	if err != nil {
-		return  nil,0, fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
+		return  nil,0, fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %v", err)
 	}
 	{{- end }}
 
@@ -162,7 +162,7 @@ func (s *AppDatabaseService) Get{{.ParentName}}{{.FieldName}}s(ctx context.Conte
 func (s *AppDatabaseService) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string) ([]models.{{.FieldName}}, error) {
 	{{.ParentName | toLowerCaseName}}_id, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
 	if err != nil {
-		return  nil,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %w", err)
+		return  nil,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
 	}
 	// results var
 	var {{.LowerFieldName}}s []models.{{.FieldName}}
@@ -183,7 +183,7 @@ func (s *AppDatabaseService) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context
 
 	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string, {{.LowerParentName}}_id).Order("{{.LowerFieldName}}s.id asc").Scan(&{{.LowerFieldName}}s).Error
 	if err != nil {
-		return nil,fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
+		return nil,fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %v", err)
 	}
 	{{- end }}
 
@@ -201,7 +201,7 @@ func (s *AppDatabaseService) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context
 
 
 	// Setting Cache before returning the user
-    AppCacheService.Set(cacheKey, &{{.LowerFieldName}}s)
+    AppCacheService.Set(cacheKey, {{.LowerFieldName}}s)
 
 
 	return {{.LowerFieldName}}s, nil
@@ -211,7 +211,7 @@ func (s *AppDatabaseService) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context
 func (s *AppDatabaseService) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string) ([]models.{{.FieldName}}, error) {
 	{{.ParentName | toLowerCaseName}}_id, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
 	if err != nil {
-		return  nil,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %w", err)
+		return  nil,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
 	}
 	// results var
 	var {{.LowerFieldName}}s []models.{{.FieldName}}
@@ -231,7 +231,7 @@ func (s *AppDatabaseService) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseNam
 
 	err = s.DB.WithContext(ctx).Model(&models.{{.FieldName}}{}).Joins(join_string).Where(filter_string,{{.LowerParentName}}_id).Order("{{.LowerFieldName}}s.id asc").Scan(&{{.LowerFieldName}}s).Error
 	if err != nil {
-		return  nil,fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %w", err)
+		return  nil,fmt.Errorf("failed to fetch {{.LowerFieldName}}s: %v", err)
 	}
 	{{- end }}
 
@@ -247,7 +247,7 @@ func (s *AppDatabaseService) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseNam
 	{{- end}}
 
 	// Setting Cache before returning the user
-    AppCacheService.Set(cacheKey, &{{.LowerFieldName}}s)
+    AppCacheService.Set(cacheKey, {{.LowerFieldName}}s)
 
 	return {{.LowerFieldName}}s, nil
 }

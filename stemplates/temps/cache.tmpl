@@ -3,6 +3,7 @@ package cache
 import (
 	"strconv"
 	"time"
+	"sync"
 
 	"{{ .ProjectName }}/configs"
 	"github.com/dgraph-io/ristretto"
@@ -28,11 +29,25 @@ func NewCacheService() (*CacheService, error) {
 	return &CacheService{cache: cache}, nil
 }
 
+
 func (c *CacheService) Get(key string) (any, bool) {
+	c.mu.RLock()
+	_, isDeleted := c.tombstone[key]
+	c.mu.RUnlock()
+
+	if isDeleted {
+		return nil, false
+	}
+
 	return c.cache.Get(key)
 }
 
 func (c *CacheService) Set(key string, value any) bool {
+
+	c.mu.Lock()
+	delete(c.tombstone, key) // Remove tombstone if previously deleted
+	c.mu.Unlock()
+
 	minutes, _ := strconv.Atoi(configs.AppConfig.GetOrDefault("BUFFER_ITEMS", "10"))
 	ttl := time.Duration(minutes) * time.Minute
 	return c.cache.SetWithTTL(key, value, 1, ttl)
@@ -40,4 +55,9 @@ func (c *CacheService) Set(key string, value any) bool {
 
 func (c *CacheService) Delete(key string) {
 	c.cache.Del(key)
+	c.cache.Wait()
+
+	c.mu.Lock()
+	c.tombstone[key] = struct{}{}
+	c.mu.Unlock()
 }

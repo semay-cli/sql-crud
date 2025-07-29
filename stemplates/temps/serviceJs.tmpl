@@ -33,7 +33,7 @@ export const {{.LowerName}}Service = {
 // Now realationshipQeury Endpoints(Many to Many)
 //###############################################
 	get{{.ParentName}}{{.FieldName}}: (data)=>{
-		return api.get({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}},{ page: data?.page, size: data?.size });
+		return api.get({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerParentName}}{{.LowerFieldName}}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}},{ page: data?.page, size: data?.size });
 	},
 
 	// Get {{.LowerFieldName}}s that can be assigned to a {{.LowerFieldName}}
@@ -46,11 +46,11 @@ export const {{.LowerName}}Service = {
 	},
 
 	add{{.FieldName}}{{.ParentName}}: (data) => {
-		return api.post({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+		return api.post({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerParentName}}{{.LowerFieldName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
 	},
 
 	delete{{.FieldName}}{{.ParentName}}: (data) => {
-		return api.delete({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+		return api.delete({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerParentName}}{{.LowerFieldName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
 	},
 {{- end}}
 {{- end }}
@@ -60,7 +60,7 @@ export const {{.LowerName}}Service = {
 // Now realationshipQeury Endpoints(one to Many)
 //###############################################
 	get{{.ParentName}}{{.FieldName}}: (data)=>{
-		return api.get({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}},{ page: data?.page, size: data?.size });
+		return api.get({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerParentName}}{{.LowerFieldName}}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}},{ page: data?.page, size: data?.size });
 	},
 
 	// Get {{.LowerFieldName}}s that can be assigned to a {{.LowerFieldName}}
@@ -73,7 +73,7 @@ export const {{.LowerName}}Service = {
 	},
 
 	add{{.FieldName}}{{.ParentName}}: (data) => {
-		return api.post({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+		return api.post({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerParentName}}{{.LowerFieldName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
 	},
 
 	delete{{.FieldName}}{{.ParentName}}: (data) => {
