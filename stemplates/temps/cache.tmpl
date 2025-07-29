@@ -3,13 +3,15 @@ package cache
 import (
 	"strconv"
 	"time"
+	"sync"
 
 	"{{ .ProjectName }}/configs"
 	"github.com/dgraph-io/ristretto"
 )
 
 type CacheService struct {
-	cache *ristretto.Cache
+	cache       *ristretto.Cache
+	deletedKeys sync.Map
 }
 
 func NewCacheService() (*CacheService, error) {
@@ -29,15 +31,22 @@ func NewCacheService() (*CacheService, error) {
 }
 
 func (c *CacheService) Get(key string) (any, bool) {
+	if _, deleted := c.deletedKeys.Load(key); deleted {
+		return nil, false // Treat as not found
+	}
+	c.deletedKeys.Delete(key) // In case it's been soft-deleted before
 	return c.cache.Get(key)
 }
 
 func (c *CacheService) Set(key string, value any) bool {
+	c.deletedKeys.Delete(key) // In case it's been soft-deleted befor
 	minutes, _ := strconv.Atoi(configs.AppConfig.GetOrDefault("BUFFER_ITEMS", "10"))
 	ttl := time.Duration(minutes) * time.Minute
 	return c.cache.SetWithTTL(key, value, 1, ttl)
 }
 
 func (c *CacheService) Delete(key string) {
+	c.deletedKeys.Store(key, struct{}{})
 	c.cache.Del(key)
+	c.cache.Wait() // Ensure the deletion is processed
 }
