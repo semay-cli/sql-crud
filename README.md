@@ -305,6 +305,10 @@ go run main.go run --env=dev
    The current generated unit tests cover CRUD functionality only.  
    Unit test generation for relationships between entities is planned and will be coming soon.
 
+5. **Custom Middleware for Token and Role Validation**  
+   You have to implement your own middleware for token and role validation.  
+   *(Soon to be added: a default admin role middleware that works out of the box.)*
+
 ## ℹ️ Additional Information
 
 For more details and to explore all available commands, you can always run:
