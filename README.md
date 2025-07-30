@@ -161,6 +161,7 @@ This file serves as the **main input metadata** for the SQL-CRUD CLI tool. It de
   "auth_app_name": "blue-admin",
   "auth_app_type": "sso" 
 }
+```
 
 ### `config.json`
 This file defines **model metadata** used by the SQL-CRUD CLI tool to auto-generate:
