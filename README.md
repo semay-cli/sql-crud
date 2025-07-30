@@ -58,7 +58,7 @@ sql-crud-sample/
 ├── database/
 ├── project.json
 └── main.go
-
+```
 ## 📁 Folder Structure Explanation
 
 ### `manager/`
@@ -210,6 +210,7 @@ Each application module (e.g., `blue-admin`, `crm`) has its own `config.json` fi
     // ...more models like App, User, Scope, Resource, JWTSalt...
   ]
 }
+```
 
 
 ## 🚀 Quick Start
