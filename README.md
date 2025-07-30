@@ -116,7 +116,7 @@ These files follow the pattern `.<env>.env`, and the active environment is deter
 ### ✅ Example:
 ```bash
 go run main.go  run --env=staging
-
+```
 
 ### `logs/`
 Directory where application logs are written (if logging to file is enabled).
