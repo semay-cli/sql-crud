@@ -12,7 +12,7 @@ var (
 		Use:           "sql-crud",
 		Short:         "SQL – command-line tool to aid structure you ECHO backend projects for API with gorm",
 		Long:          "ECHO – command-line tool to aid structure you ECHO backend projects for API with gorm",
-		Version:       "0.1.4",
+		Version:       "0.1.6",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}
