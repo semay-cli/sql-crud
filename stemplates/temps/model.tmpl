@@ -58,11 +58,11 @@ type {{.Name}}Get struct {
 // {{.Name}}Put model info
 // @Description {{.Name}}Put type information
 type {{.Name}}Put struct {
-	{{range .Fields}} {{- if .Put}} {{.Name}} *{{.Type}}  {{.BackTick}}{{.Annotation}}{{.BackTick}}{{- end}}
+	{{range .Fields}} {{- if .Put}} {{.Name}} *{{.Type}}  {{.BackTick}}{{.Annotation}} required:"false"{{.BackTick}}{{- end}}
 {{end}}}
 
 // {{.Name}}Patch model info
 // @Description {{.Name}}Patch type information
 type {{.Name}}Patch struct {
-	{{range .Fields}}{{- if .Patch}}{{.Name}} *{{.Type}}  {{.BackTick}}{{.Annotation}}{{.BackTick}}{{- end}}
+	{{range .Fields}}{{- if .Patch}}{{.Name}} *{{.Type}}  {{.BackTick}}{{.Annotation}} required:"false"{{.BackTick}}{{- end}}
 {{end}}}

@@ -77,7 +77,7 @@ export const {{.LowerName}}Service = {
 	},
 
 	delete{{.FieldName}}{{.ParentName}}: (data) => {
-		return api.delete({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerFieldName}}{{.LowerParentName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
+		return api.delete({{.BackTick}}/{{ $.AppName | replaceString }}/{{.LowerParentName}}{{.LowerFieldName}}/${{ "{" }}data?.{{.LowerFieldName}}Id{{ "}" }}/${{ "{" }}data?.{{.LowerParentName}}Id{{ "}" }}{{.BackTick}});
 	},
 
 {{- end }}

@@ -1,0 +1,87 @@
+package cache
+
+import (
+		"bytes"
+	"encoding/gob"
+	"errors"
+	"strconv"
+
+	"time"
+
+	"github.com/allegro/bigcache/v3"
+
+	"{{ .ProjectName }}/configs"
+	"github.com/dgraph-io/ristretto"
+)
+
+
+type CacheService struct {
+	cache *bigcache.BigCache
+}
+
+func NewCacheService() (*CacheService, error) {
+	ttlMinutes, _ := strconv.Atoi(configs.AppConfig.GetOrDefault("CACHE_TTL_MINUTES", "10"))
+	shards, _ := strconv.Atoi(configs.AppConfig.GetOrDefault("CACHE_SHARDS", "1024"))
+	maxEntries, _ := strconv.Atoi(configs.AppConfig.GetOrDefault("CACHE_MAX_ENTRIES", "1000"))
+	cache_size, _ := strconv.ParseInt(configs.AppConfig.GetOrDefault("MAX_CACHE_SIZE", "250"), 10, 64)
+
+	config := bigcache.Config{
+		Shards:             shards,
+		LifeWindow:         time.Duration(ttlMinutes) * time.Minute,
+		CleanWindow:        time.Duration(ttlMinutes) * time.Minute,
+		MaxEntriesInWindow: maxEntries,
+		MaxEntrySize:       500,
+		Verbose:            false,
+		HardMaxCacheSize:   int(cache_size) * 1024 * 1024, // Convert MB to bytes
+	}
+
+	cache, err := bigcache.NewBigCache(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CacheService{cache: cache}, nil
+}
+
+func (c *CacheService) Get(key string) (any, bool) {
+	data, err := c.cache.Get(key)
+	if err != nil {
+		if errors.Is(err, bigcache.ErrEntryNotFound) {
+			return nil, false
+		}
+		return nil, false
+	}
+
+	var value any
+	err = decode(data, &value)
+	if err != nil {
+		return nil, false
+	}
+	return value, true
+}
+
+func (c *CacheService) Set(key string, value any) bool {
+	data, err := encode(value)
+	if err != nil {
+		return false
+	}
+	return c.cache.Set(key, data) == nil
+}
+
+func (c *CacheService) Delete(key string) {
+	_ = c.cache.Delete(key)
+}
+
+func encode(value any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(value)
+	return buf.Bytes(), err
+}
+
+func decode(data []byte, out *any) error {
+	buf := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(buf)
+	return dec.Decode(out)
+}
+
