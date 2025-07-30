@@ -3,10 +3,16 @@ package models
 import (
 	"fmt"
 	"log"
+	{{- if eq .AuthAppName  .AppName }}
 	"time"
+	{{- end }}
 
 	"{{.ProjectName}}/database"
 	"{{.ProjectName}}/configs"
+	{{- if ne .AuthAppName .AppName }}
+	{{ .AuthAppName | replaceString}}_models "{{.ProjectName}}/{{.AuthAppName}}/models"
+	{{- end}}
+	"gorm.io/gorm/clause"
 	"github.com/google/uuid"
 )
 
@@ -54,7 +60,6 @@ func CleanDatabase(test_flag bool) {
 }
 
 {{ if eq .AuthAppName .AppName }}
-{{- if eq .AuthAppType "standalone" }}
 func CreateSuperUser() {
 	configs.NewEnvFile("./configs")
 	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}")
@@ -85,37 +90,6 @@ func CreateSuperUser() {
 	db.Commit()
 	fmt.Println("Superuser created successfully")
 
-}
-{{- else if eq .AuthAppType "sso" }}
-func CreateSuperUser() {
-	configs.NewEnvFile("./configs")
-	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}")
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	// Create the superuser
-	hashedPassword := HashFunc("default@123")
-	uuid_uuid, _ := uuid.NewV7()
-
-	user := &User{
-		Email:         "superuser@mail.com",
-		FirstName:     "Super",
-		MiddleName:    "Admin",
-		LastName:      "User",
-		Username:      "superuser",
-		Password:      hashedPassword,
-		DateRegistred: time.Now(),
-		Disabled:      false,
-		UUID:          uuid_uuid.String(),
-		CreatedAt:     time.Now(),
-	}
-
-	// Insert the user into the database
-	if err := db.Create(user).Error; err != nil {
-		fmt.Printf("failed to create superuser: %v\n", err)
-	}
-	db.Commit()
-	fmt.Println("Superuser created successfully")
 }
 
 func ResourceMigration() {
@@ -128,6 +102,49 @@ func ResourceMigration() {
 	}
 
 	// ########################
+	uuid_uuid, _ := uuid.NewV7()
+	apps := []App{
+		{
+			Name: "{{.AppName }}",
+			UUID: uuid_uuid.String(),
+			Description: "{{.AppName }} Description",
+			Active: true,
+		},
+	}
+
+	groups := []Group{
+		{
+			Name: "{{ .AppName | toLowerCaseName }}-superadmin",
+			Description: "{{ .AppName | toLowerCaseName }} superuser role",
+			Active: true,
+		},
+	}
+
+	scopes := []Scope{
+		{{- range .Models}}
+		{	
+			Name: "{{$.AppName}}-{{.LowerName}}:read",
+			Description: "{{.AppName }} Read {{.LowerName}}",
+			Active: true,
+		},
+		{	
+			Name: "{{$.AppName}}-{{.LowerName}}:create",
+			Description: "{{.AppName }} Create {{.LowerName}}",
+			Active: true,
+		},
+		{	
+			Name: "{{$.AppName}}-{{.LowerName}}:update",
+			Description: "{{.AppName }} Update {{.LowerName}}",
+			Active: true,
+		},
+		{	
+			Name: "{{$.AppName}}-{{.LowerName}}:delete",
+			Description: "{{.AppName }} Delete {{.LowerName}}",
+			Active: true,
+		},
+		{{- end}}
+	}
+
 	resources := []Resource{
 	{{- range .Models}}
 		{
@@ -198,18 +215,197 @@ func ResourceMigration() {
 	}
 
 	// ########################
-	if err := db.Create(&resources).Error; err != nil {
+	if err := db.Clauses(clause.OnConflict{
+		UpdateAll: true,
+	}).Create(&apps).Error; err != nil {
 		log.Fatalf("Failed to create resources: %v", err)
 		return
 	}
+
+	if err := db.Clauses(clause.OnConflict{
+		UpdateAll: true,
+	}).Create(&groups).Error; err != nil {
+		log.Fatalf("Failed to create resources: %v", err)
+		return
+	}
+
+	if err := db.Clauses(clause.OnConflict{
+		UpdateAll: true,
+	}).Create(&scopes).Error; err != nil {
+		log.Fatalf("Failed to create resources: %v", err)
+		return
+	}
+
+	if err := db.Clauses(clause.OnConflict{
+		UpdateAll: true,
+	}).Create(&resources).Error; err != nil {
+		log.Fatalf("Failed to create resources: %v", err)
+		return
+	}
+
 	// commit transaction
 	db.Commit()
 
-	log.Println("Successfully created resources")
+	log.Println("Successfully created apps, groups and scopes")
 }
 {{- else }}
-// No auth app
-{{- end}}
+func ResourceMigration() {
+	configs.NewEnvFile("./configs")
+
+	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}")
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+		return
+	}
+
+	// ########################
+	uuid_uuid, _ := uuid.NewV7()
+	apps := []{{ .AuthAppName | replaceString}}_models.App{
+		{
+			Name: "{{.AppName }}",
+			UUID: uuid_uuid.String(),
+			Description: "{{.AppName }} Description",
+			Active: true,
+		},
+	}
+
+	groups := []{{ .AuthAppName | replaceString}}_models.Group{
+		{
+			Name: "{{ .AppName | toLowerCaseName }}-superadmin",
+			Description: "{{ .AppName | toLowerCaseName }} superuser role",
+			Active: true,
+		},
+	}
+
+	scopes := []{{ .AuthAppName | replaceString}}_models.Scope{
+		{{- range .Models}}
+		{	
+			Name: "{{$.AppName}}-{{.LowerName}}:read",
+			Description: "{{.AppName }} Read {{.LowerName}}",
+			Active: true,
+		},
+		{	
+			Name: "{{$.AppName}}-{{.LowerName}}:create",
+			Description: "{{.AppName }} Create {{.LowerName}}",
+			Active: true,
+		},
+		{	
+			Name: "{{$.AppName}}-{{.LowerName}}:update",
+			Description: "{{.AppName }} Update {{.LowerName}}",
+			Active: true,
+		},
+		{	
+			Name: "{{$.AppName}}-{{.LowerName}}:delete",
+			Description: "{{.AppName }} Delete {{.LowerName}}",
+			Active: true,
+		},
+		{{- end}}
+	}
+
+	resources := []{{ .AuthAppName | replaceString}}_models.Resource{
+	{{- range .Models}}
+		{
+			Name: "{{.AppName | replaceString}}_can_view_{{.LowerName}}",
+			Description: "Allows viewing of {{.LowerName}}",
+			Method: "GET",
+			RoutePath: "/{{.AppName | replaceString}}/{{.LowerName}}",
+		},
+		{
+			Name: "{{.AppName | replaceString}}_can_view_{{.LowerName}}_single",
+			Description: "Allows viewing of {{.LowerName}} (single)",
+			Method: "GET",
+			RoutePath: "/{{.AppName | replaceString}}/{{.LowerName}}/:{{.LowerName}}_id",
+		},
+		{
+			Name: "{{.AppName | replaceString}}_can_add_{{.LowerName}}",
+			Description: "Allows creating of {{.LowerName}}",
+			Method: "POST",
+			RoutePath: "/{{.AppName | replaceString}}/{{.LowerName}}",
+		},
+		{
+			Name: "{{.AppName | replaceString}}_can_change_{{.LowerName}}",
+			Description: "Allows Updating of {{.LowerName}}",
+			Method: "PATCH",
+			RoutePath: "/{{.AppName | replaceString}}/{{.LowerName}}/:{{.LowerName}}_id",
+		},
+		{
+			Name: "{{.AppName | replaceString}}_can_delete_{{.LowerName}}",
+			Description: "Allows Deleting of {{.LowerName}}",
+			Method: "DELETE",
+			RoutePath: "/{{.AppName | replaceString}}/{{.LowerName}}/:{{.LowerName}}_id",
+		},
+
+	{{range .Relations}}
+		{
+			Name: "{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}_relation_{{.LowerParentName}}",
+			Description: "Allows Getting of {{.LowerFieldName}}s of {{.LowerParentName}}",
+			Method: "GET",
+			RoutePath: "/{{.AppName | replaceString}}/{{.LowerFieldName}}{{.LowerParentName}}/:{{.LowerParentName}}_id",
+		},
+		{
+			Name: "{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}s_complement_{{.LowerParentName}}",
+			Description: "Allows Getting of all {{.LowerFieldName}}s not attached to {{.LowerParentName}}",
+			Method: "GET",
+			RoutePath: "/{{.AppName | replaceString}}/{{.LowerFieldName}}complement{{.LowerParentName}}/:{{.LowerParentName}}_id",
+		},
+		{
+			Name: "{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}s_attached_{{.LowerParentName}}",
+			Description: "Allows Getting of all {{.LowerFieldName}}s of {{.LowerParentName}}",
+			Method: "GET",
+			RoutePath: "/{{.AppName | replaceString}}/{{.LowerFieldName}}noncomplement{{.LowerParentName}}/:{{.LowerParentName}}_id",
+		},
+		{
+			Name: "{{.AppName | replaceString}}_can_add_{{.LowerFieldName}}s_attached_{{.LowerParentName}}",
+			Description: "Allows Adding {{.LowerFieldName}}s to {{.LowerParentName}}",
+			Method: "POST",
+			RoutePath: "/{{.LowerFieldName}}{{.LowerParentName}}/:{{.LowerFieldName}}_id/:{{.LowerParentName}}_id",
+		},
+		{
+			Name: "{{.AppName | replaceString}}_can_delete_{{.LowerFieldName}}s_attached_{{.LowerParentName}}",
+			Description: "Allows Removing of {{.LowerFieldName}} from {{.LowerParentName}}",
+			Method: "DELETE",
+			RoutePath: "/{{.LowerFieldName}}{{.LowerParentName}}/:{{.LowerFieldName}}_id/:{{.LowerParentName}}_id",
+		},
+		{{end}}
+	{{- end}}
+
+	}
+
+	// ########################
+	if err := db.Clauses(clause.OnConflict{
+		UpdateAll: true,
+	}).Create(&apps).Error; err != nil {
+		log.Fatalf("Failed to create resources: %v", err)
+		return
+	}
+
+	if err := db.Clauses(clause.OnConflict{
+		UpdateAll: true,
+	}).Create(&groups).Error; err != nil {
+		log.Fatalf("Failed to create resources: %v", err)
+		return
+	}
+
+	if err := db.Clauses(clause.OnConflict{
+		UpdateAll: true,
+	}).Create(&scopes).Error; err != nil {
+		log.Fatalf("Failed to create resources: %v", err)
+		return
+	}
+
+	if err := db.Clauses(clause.OnConflict{
+		UpdateAll: true,
+	}).Create(&resources).Error; err != nil {
+		log.Fatalf("Failed to create resources: %v", err)
+		return
+	}
+
+	// commit transaction
+	db.Commit()
+
+	log.Println("Successfully created apps, groups and scopes")
+}
+
 {{- end }}
 
 {{- if eq .AuthAppType "standalone" }}
@@ -228,43 +424,5 @@ func Populate(test_flag bool) {
 {{- end }}
 
 
-func CreateStatsDatabase() {
-	configs.NewEnvFile("./configs")
-	db, err := database.ReturnSession("{{.AppName | replaceString }}")
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
 
-	// Get the underlying *sql.DB
-	sqlDB, err := db.DB()
-	if err != nil {
-		log.Fatalf("Failed to get raw DB instance: %v", err)
-	}
-
-	dropView := {{.BackTick}}DROP VIEW IF EXISTS {{.AuthAppName | replaceString }}_stats;{{.BackTick}}
-	_, err = sqlDB.Exec(dropView)
-	if err != nil {
-		log.Fatalf("Failed to drop existing view: %v", err)
-	}
-
-	rawSQLString := {{.BackTick}}
-	CREATE VIEW "{{.AppName | replaceString }}_stats"  AS
-	SELECT
-	{{- $total := len .Models }}
-	{{- range $index, $model := .Models }}
-		(SELECT COUNT(*) FROM "{{$model.Name | camelToSnake }}s") AS total_{{$model.Name | camelToSnake }}s{{if ne (add $index 1) $total}},{{else}}{{end}}
-	{{- end}}
-	;
-	{{.BackTick}}
-
-	// Execute the raw SQL
-	_, err = sqlDB.Exec(rawSQLString)
-	if err != nil {
-		log.Fatalf("Failed to create view: %v", err)
-	} else {
-		log.Println("Successfully created view: blue_auth_stats")
-	}
-
-	log.Println("{{.AppName | replaceString }}_stats view created successfully")
-}
 

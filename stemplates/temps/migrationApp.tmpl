@@ -18,6 +18,7 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			// Check for the type flag
 			migrateType, _ := cmd.Flags().GetString("type")
+			appName, _ := cmd.Flags().GetString("app")
 
 			env, _ := cmd.Flags().GetString("env")
 
@@ -26,14 +27,11 @@ var (
 				env = "dev"
 			}
 			configs.AppConfig.SetEnv(env)
-
 			switch migrateType {
 			case "create":
-				init_migrate()
-			case "stats":
-				create_views()
+				init_migrate(appName)
 			default:
-				populate_migrate()
+				populate_migrate(appName)
 			}
 		},
 	}
@@ -43,7 +41,8 @@ var (
 		Short: "Drop Database Models for found in init migration Models",
 		Long:  "Drop Models found in the models definition",
 		Run: func(cmd *cobra.Command, args []string) {
-			clean_database()
+			appName, _ := cmd.Flags().GetString("app")
+			clean_database(appName)
 		},
 	}
 
@@ -53,6 +52,7 @@ var (
 		Short: "Create super user",
 		Long:  "Create super user",
 		Run: func(cmd *cobra.Command, args []string) {
+
 			{{ .AuthAppName | replaceString }}.CreateSuperUser()
 			fmt.Println("Super user created successfully")
 		},
@@ -61,15 +61,19 @@ var (
 
 )
 
-func init_migrate() {
-
+func init_migrate(app_name string) {
+	switch app_name{
     {{- range .AppNames}}
-    {{ . | replaceString }}.InitDatabase(false)
+	case "{{ . }}":
+		{{ . | replaceString }}.InitDatabase(false)
+		fmt.Println("Migrated {{ . }} Database Models sucessfully")
     {{- end }}
-	fmt.Println("Migrated Database Models sucessfully")
+	default:
+		fmt.Println("No App provided, please provide existing app name")
+	}
 }
 
-func populate_migrate() {
+func populate_migrate(app_name string) {
 {{- if eq .AuthAppType "standalone" }}
     {{- range .AppNames }}
         {{ replaceString . }}.Populate(false)
@@ -78,30 +82,36 @@ func populate_migrate() {
 {{- end }}
 
 {{- if eq .AuthAppType "sso" }}
+	switch app_name {
     {{- range .AppNames }}
+	case "{{ . }}":
         {{ replaceString . }}.ResourceMigration()
+    	fmt.Println("{{ . }} Resources Created Successfully. Database Models populated successfully.")
     {{- end }}
-    fmt.Println("Admin Resources Created Successfully. Database Models populated successfully.")
+	default:
+		fmt.Println("No App provided, please provide existing app name")
+	}
 {{- end }}
 
 }
 
-func create_views() {
-	{{- range .AppNames}}
-	{{ . | replaceString }}.CreateStatsDatabase()
-	{{- end}}
-	fmt.Println("Auth Created App stat views")
-}
 
-func clean_database() {
+func clean_database(app_name string) {
+	switch app_name{
 	{{- range .AppNames}}
-	{{ . | replaceString }}.CleanDatabase(false)
+	case "{{ . }}":
+		{{ . | replaceString }}.CleanDatabase(false)
+		fmt.Println("Dropped Tables sucessfully")
 	{{- end}}
-	fmt.Println("Dropped Tables sucessfully")
+	default:
+		fmt.Println("No App provided, please provide existing app name")
+	}
 }
 
 func init() {
 	{{.AppName | replaceString }}migrate.Flags().StringP("type", "t", "", "Specify create to \"create\" the models to database, and \"populate\" to populate default permissions and content types")
+	{{.AppName | replaceString }}migrate.Flags().StringP("app", "a", "", "Specify for which app to migrate app meta data to sso app")
+	{{.AppName | replaceString }}clean.Flags().StringP("app", "a", "", "Specify for which app to migrate app meta data to sso app")
 	blue_adminmigrate.Flags().StringP("env", "e", "", "Specify which config .env file to load from \"dev\",\"prod\", ...")
 	goFrame.AddCommand({{.AppName | replaceString }}migrate)
 	goFrame.AddCommand({{.AppName | replaceString }}clean)

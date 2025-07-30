@@ -54,6 +54,9 @@ func InstallSSOhApp(userName, projectName, authAppName string) {
 	stemplates.CommonModInit(moduleName)
 	// Get current working directory
 	stemplates.InitProjectJSON()
+	stemplates.ProjectSettings.AuthAppType = "sso"
+	stemplates.ProjectSettings.AuthAppName = authAppName
+	stemplates.ProjectSettings.CurrentAppName = authAppName
 
 	stemplates.RenderData.ProjectName = moduleName
 	generate.GenerateMainAndManager(stemplates.RenderData)
@@ -68,14 +71,16 @@ func InstallSSOhApp(userName, projectName, authAppName string) {
 	os.Chdir(currentDir)
 	_ = handleAppDirectoryAndLoadConfig(authAppName)
 
-	stemplates.RenderData.AuthAppName = stemplates.ProjectSettings.AuthAppName
-	stemplates.RenderData.AppName = stemplates.ProjectSettings.AuthAppName
+	stemplates.RenderData.AuthAppName = authAppName
+	stemplates.RenderData.AppName = authAppName
 	stemplates.RenderData.AppNames = stemplates.ProjectSettings.AppNames
+	stemplates.RenderData.CurrentAppName = authAppName
 	stemplates.ProjectSettings.CurrentAppName = authAppName
 
 	generate.GenerateTasks(stemplates.RenderData)
 	generate.GenerateConfigTestEnv(stemplates.RenderData)
 	generate.GenerateEchoCoverage(stemplates.RenderData)
+	generate.GenerateEchoSetup(stemplates.RenderData)
 
 	generate.GenerateModels(stemplates.RenderData)
 	generate.GenerateUtilsApp(stemplates.ProjectSettings)

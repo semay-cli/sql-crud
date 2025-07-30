@@ -1,10 +1,11 @@
 package generate
 
-import "github.com/semay-cli/sql-crud/stemplates"
+import (
+	"github.com/semay-cli/sql-crud/stemplates"
+)
 
 func GenerateEchoSetup(data stemplates.Data) {
 	tmpl := stemplates.LoadTemplate("echoSetup")
-
 	stemplates.WriteTemplateToFile("setup.go", tmpl, data)
 }
 

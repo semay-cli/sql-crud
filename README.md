@@ -237,10 +237,15 @@ Edit the `.dev.env` file in the project root and set the SQL database URI:
 DATABASE_URI=your-database-uri-here
 ```
 
-### 4. Run Migrations
+### 4. Run Migrations and migrate data models meta data
 
 ```bash
-go run main.go migrate -t create -e dev
+go run main.go migrate -t create -e dev -a blue-admin
+```
+
+
+```bash
+go run main.go migrate -a  blue-admin
 ```
 
 > **Note for Windows users using SQLite:**  
@@ -255,6 +260,7 @@ set CGO_ENABLED=1
 ```bash
 go run main.go superuser
 ```
+
 
 This will create a default superuser with the following credentials:
 
