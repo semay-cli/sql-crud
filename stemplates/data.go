@@ -95,6 +95,7 @@ type Model struct {
 	SearchFields []string       `json:"search_fields"`
 	Relations    []Relationship `json:"relations"`
 	AuthAppType  string         `json:"auth_app_type"`
+	TableName    string         `json:"table_name"`
 }
 
 // Relationship defines model relationships.

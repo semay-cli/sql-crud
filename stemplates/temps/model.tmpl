@@ -25,6 +25,15 @@ type {{.Name}} struct {
     UpdatedAt time.Time {{.BackTick}}bson:"updated_at,omitempty"{{.BackTick}}
 }
 
+{{- if  .TableName }}
+
+func({{.Name}}) TableName() string {
+	
+	return "{{.TableName}}"
+}
+
+{{- end}}
+
 {{- $hasUUID := false }}
 {{- range .Fields}}
     {{- if eq .Name "UUID" }}
