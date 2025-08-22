@@ -1,0 +1,378 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Eye, Edit, Trash2, Plus, Building2, Mail, BadgeDollarSign } from "lucide-react";
+import { useForm } from 'react-hook-form';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import GenericStyledFilterCard from "@/components/common/GenricFilterCard";
+import { FilterOption } from "@/types";
+import { toast } from "sonner";
+import { {{.LowerName}}Service } from "@/api/{{.LowerName}}Service"
+import GenericPagination from "@/components/common/GenericPaginatin";
+import {{.Name}}Form from "./{{.LowerName}}Form";
+import { set } from "date-fns";
+
+interface {{.Name}}Data {
+  {{- range .Fields}} {{.LowerName}}: {{.Type | toLowerCaseName}}, {{- end}}
+}
+
+interface {{.Name}}Response {
+  data?: {{.Name}}Data[];
+  total?: number;
+}
+
+
+
+const initialFormData: Omit<{{.Name}}Data, 'id'> = {
+  {{- range .Fields}} {{.LowerName}}: "", {{- end}}
+};
+
+export default function {{.Name}}Page() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
+  const  [itemId,setItemId]=useState(null)
+  const [pageSize, setPageSize] = useState(10);
+  const [filters, setFilters] = useState({
+      {{- range .SearchFields}}
+      {{ . }}: '',
+      {{- end}}
+  });
+
+  // API Call for fetching {{.LowerName}}s
+  const {
+    data: {{.LowerName}}Response,
+    isLoading,
+    error
+  } = useQuery({
+    queryKey: ['{{.LowerName}}s', page, pageSize, JSON.stringify(filters)],
+    queryFn: async () => {
+      return {{.LowerName}}Service.get{{.Name}}s({ page, size: pageSize, ...filters });
+    }
+    ,
+    meta: {
+      onError: (err: any) => {
+
+        toast.error(`Error loading {{.LowerName}}s: ${err.message}`);
+      }
+    }
+  });
+
+  if (error) {
+    console.error("Error fetching customers:", error);
+  }
+
+  // API mutation for adding/updating {{.LowerName}}s
+  const update{{.Name}}Mutation = useMutation({
+    mutationFn: ({{.Name}}Data: any) => {{.LowerName}}Service.update{{.Name}}({{.Name}}Data),
+    onSuccess: () => {
+      toast.success("Customer updated successfully");
+      // queryClient.invalidateQueries({ queryKey: ['{{.LowerName}}', id] });
+      queryClient.invalidateQueries({ queryKey: ['{{.LowerName}}s'] });
+    },
+    onError: (err: any) => {
+      toast.error(`Failed to update {{.Name}}: ${err.message}`);
+    }
+  });
+
+  const handleUpdate = (formData: any) => {
+    console.log(formData)
+    if (!itemId) {
+      toast.error("{{.Name}} ID is missing for update.");
+      return;
+    }
+    update{{.Name}}Mutation.mutate({ {{.LowerName}}Id: itemId, {{.Name}}Data: JSON.parse(JSON.stringify(formData)) });
+  };
+
+  const add{{.Name}}Mutation = useMutation({
+    mutationFn: ({{.Name}}Data: Omit<{{.Name}}Data, 'id'>) => {{.LowerName}}Service.createCustomer({{.Name}}Data),
+    onSuccess: () => {
+      toast.success("{{.Name}} added successfully");
+      queryClient.invalidateQueries({ queryKey: ['{{.LowerName}}s'] });
+    },
+    onError: (err: any) => {
+      toast.error(`Failed to add {{.Name}}: ${err.message}`);
+    }
+  });
+
+  const handleAdd{{.Name}} = async (formData : any) => {
+    add{{.Name}}Mutation.mutate(formData);
+  };
+
+  const remove{{.Name}}Mutation = useMutation({
+    mutationFn: (customerId: string) => {{.LowerName}}Service.deleteCustomer(customerId),
+    onSuccess: () => {
+      toast.success("{{.Name}} removed successfully");
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+    },
+    onError: (err: any) => {
+      toast.error(`Failed to remove {{.Name}}: ${err.message}`);
+    }
+  });
+
+ const  handleDelete{{.Name}} = (Id: any)=>{
+  remove{{.Name}}Mutation.mutate(Id)
+ }  
+
+  // Create form for filters
+  const filterForm = useForm({
+    defaultValues: {
+     {{- range .SearchFields}}
+      {{ . }}: '',
+      {{- end}}
+    }
+  });
+
+  // Clear all filters
+  const clearFilters = () => {
+    filterForm.reset({
+     {{- range .SearchFields}}
+      {{ . }}: '',
+      {{- end}}
+    });
+
+
+    setFilters({
+     {{- range .SearchFields}}
+      {{ . }}: '',
+      {{- end}}
+    });
+    setPage(1);
+  };
+
+  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedItem, setSelectedItem] = useState<{{.Name}}Data | null>(null);
+  const [formData, setFormData] = useState<Omit<{{.Name}}Data, 'id'>>(initialFormData);
+  const [isEditing, setIsEditing] = useState(false);
+
+
+  const {{.LowerName}}s = {{.LowerName}}Response?.data ?? [];
+  // ###############
+
+  const filterOptions: FilterOption[] = [
+  {{- range .SearchFields}}
+    { field: "{{ . }}", label: "{{ . }}", type: "text" },
+      {{- end}}
+    
+  ]
+
+
+  const handleAdd = () => {
+    setFormData(initialFormData);
+    setIsEditing(false);
+    setActiveTab("form");
+  };
+
+  const handleEdit = (item: {{.Name}}Data) => {
+    setItemId(item.id)
+    setFormData(item);
+    setIsEditing(true);
+    setActiveTab("form");
+  };
+
+  const handleView = (item: {{.Name}}Data) => {
+    setSelectedItem(item);
+    setActiveTab("details");
+  };
+
+
+ 
+  // Pagination
+  const handlePageChange = (page: number) => {
+    setPage(page);
+  };
+
+  if (isLoading) {
+    <p>Loading</p>
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">Customer Management</h1>
+        <p className="text-muted-foreground">Manage your registered customers.</p>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="list">Table</TabsTrigger>
+          {activeTab == "details" ?
+            <TabsTrigger value="details">Details</TabsTrigger> : ""}
+          {activeTab == "form" ?
+          <TabsTrigger value="form">Form</TabsTrigger> : ""}
+        </TabsList>
+        <TabsContent value="overview">
+          <Card>
+            <CardHeader>
+              <CardTitle>Customer Master Table</CardTitle>
+              <CardDescription>
+                The <code>customer</code> table stores detailed information about each registered customer, including tax identifiers, contact details, and regional data. It forms the foundation for linking shipments, billing, and communication records.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm text-muted-foreground space-y-2">
+                <p>
+                  This table is used to manage customer profiles for shipping operations, ensuring accurate and up-to-date data for billing, communication, and compliance purposes.
+                </p>
+                <p><strong>Highlights:</strong></p>
+                <ul className="list-disc list-inside">
+                  <li><code>tino</code>: Unique tax identification number or internal customer reference.</li>
+                  <li><code>cname</code>: Full legal name of the customer or company.</li>
+                  <li><code>cvat</code>: Customer’s VAT (Value Added Tax) registration number.</li>
+                  <li><code>email</code>: Registered email address for communication and notifications.</li>
+                  <li><code>region</code> & <code>city</code>: Geographical location of the customer.</li>
+                  <li><code>businesstype</code>: Category or type of business (e.g., Importer, Exporter, Broker).</li>
+                  <li><code>primaryc</code>: Name or role of the primary contact person.</li>
+                  <li><code>secondaryc</code>: Secondary point of contact, used for backups or escalations.</li>
+                  <li><code>created_at</code> & <code>updated_at</code>: Timestamps for record tracking.</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+
+
+        </TabsContent>
+        <TabsContent value="list" className="space-y-6">
+
+          <GenericStyledFilterCard
+            columns={filterOptions}
+            queryKey="{{.LowerName}}s"
+            setFilters={setFilters}
+            setPage={setPage}
+            filterForm={filterForm}
+            clearFilters={clearFilters}
+          />
+
+
+          {/* Records Table */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Customer Records</CardTitle>
+              <Button onClick={handleAdd} className="bg-shipping-blue hover:bg-shipping-blue/90">
+                <Plus className="h-4 w-4 mr-2" />
+                Add New
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                  {{- range .Fields}} 
+                    <TableHead>{{.Name}}</TableHead>
+                  {{- end}}
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {  {{.LowerName}}s?.map((item) => (
+                    <TableRow key={item?.id}>
+                      {{- range .Fields}} 
+                        <TableCell>{item?.{{.LowerName}}}</TableCell>
+                      {{- end}}
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleView(item)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEdit(item)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDelete{{.Name}}(item?.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {/* Pagination under table */}
+              <GenericPagination
+                totalItems={ {{.LowerName}}Response?.total || 0}
+                itemsPerPage={pageSize}
+                currentPage={page}
+                onPageChange={handlePageChange} 
+                onItemsPerPageChange={setPageSize}
+                />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="details" className="space-y-6">
+          {selectedItem ? (
+  <Card>
+  <CardHeader>
+    <CardTitle className="text-lg flex items-center gap-2">
+      <Building2 className="w-5 h-5 text-muted-foreground" />
+      {{.Name}} Details 
+    </CardTitle>
+  </CardHeader>
+
+  <CardContent>
+    <div className="space-y-8">
+
+      {/* Contact Info */}
+      <section>
+        <div className="grid grid-cols-2 gap-y-3 gap-x-6 text-sm">
+        {{- range .Fields}}
+         <div>
+            <span className="text-muted-foreground font-medium">{{.Name}}:</span><br />
+            {selectedItem?.{{.LowerName}} || "N/A"}
+          </div>
+         {{- end}}
+       
+        </div>
+      </section>
+
+     
+    </div>
+  </CardContent>
+</Card>
+) : (
+  <Card>
+    <CardContent className="p-8 text-center">
+      <p className="text-muted-foreground">Select a customer to view details</p>
+    </CardContent>
+  </Card>
+)}
+
+        </TabsContent>
+
+        <TabsContent value="form" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>{isEditing ? 'Update Customer' : 'Add New Customer'}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              { isEditing ? 
+                  <{{.Name}}Form initialData={formData} isEditing={isEditing} onSubmit={handleUpdate}  /> :
+                  <{{.LowerName}}Form initialData={formData} isEditing={isEditing} onSubmit={handleAdd{{.Name}}}  />
+              }
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+    </div>
+  );
+}

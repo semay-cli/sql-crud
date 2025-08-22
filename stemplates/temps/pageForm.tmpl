@@ -1,0 +1,56 @@
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { {{.LowerName}}Schema, {{.Name}}FormPostValues } from "@/schemas/{{.LowerName}}Schema";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useEffect } from "react";
+
+type Props = {
+  initialData?: {{.Name}}FormPostValues; // for editing
+  onSubmit: (data: {{.Name}}FormPostValues) => void;
+  isEditing?: boolean;
+};
+
+export default function {{.Name}}Form({ initialData, onSubmit, isEditing }: Props) {
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<{{.Name}}FormPostValues>({
+    resolver: zodResolver({{.LowerName}}Schema),
+    defaultValues: initialData || {
+     {{- range .Fields}} {{.LowerName}}: "", {{- end}}
+    },
+  });
+
+  // Reset form when initialData changes (e.g. when editing a different customer)
+  useEffect(() => {
+    if (initialData) {
+      reset(initialData);
+    }
+  }, [initialData, reset]);
+
+ 
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-2 gap-4">
+        {{- range .Fields}} 
+            <div>
+                <Label>{{.Name}}</Label>
+                <Input {...register("{{.LowerName}}")} />
+                {errors.{{.LowerName}} && <p className="text-sm text-red-500">{errors.{{.LowerName}}.message}</p>}
+            </div>
+        {{- end}}
+      <div className="col-span-2 mt-4 flex gap-2">
+        <Button type="submit" className="bg-blue-600 text-white">
+          {isEditing ? "Update" : "Save"}
+        </Button>
+        <Button type="button" variant="outline" onClick={() => reset()}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}

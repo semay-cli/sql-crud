@@ -1,0 +1,16 @@
+import { z } from "zod";
+
+
+export const {{.LowerName}}PostSchema = z.object({
+    {{- range .Fields}}{{- if .Post}} {{.LowerName}}: z.string(), {{- end}}
+{{end}}});
+
+export type CustomerFormPostValues = z.infer<typeof customerPostSchema>;
+
+
+export const {{.LowerName}}PatchSchema = z.object({
+    {{- range .Fields}}{{- if .Patch}} {{.LowerName}}: z.string(), {{- end}}
+{{end}}});
+
+
+export type CustomerFormPatchValues = z.infer<typeof {{.LowerName}}PatchSchema>;

@@ -178,6 +178,7 @@ func handleProjectType(projectType, frame string, cmd *cobra.Command) {
 			stemplates.RenderData.AppName = stemplates.ProjectSettings.AuthAppName
 			stemplates.RenderData.AppNames = stemplates.ProjectSettings.AppNames
 			generate.GenerateAPIClientJS(stemplates.RenderData)
+			generate.GenerateFormSchemaZOD(stemplates.RenderData)
 		}
 	default:
 		fmt.Println(frame)

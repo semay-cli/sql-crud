@@ -45,5 +45,13 @@ APP_NAME=dev
 #{{ .AppName | replaceStringCapitalize }}_DB_TYPE="mongodb"
 #{{ .AppName | replaceStringCapitalize }}_MONGODB_URI="yourmongouri"
 
+#################################################
+# {{ .AppName | replaceStringCapitalize }} App RedisValues
+#################################################
+{{ .AppName | replaceStringCapitalize }}RedisURL="redis uri"
+{{ .AppName | replaceStringCapitalize }}_RedisPassword="your redis password"
+{{ .AppName | replaceStringCapitalize }}_RedisDB=1
+{{ .AppName | replaceStringCapitalize }}_RedisTTL=10
+{{ .AppName | replaceStringCapitalize }}_RedisPrefix="{{ .AppName | replaceStringCapitalize }}_dev"
 #Messeage qeue settings specifically rabbit
 {{ .AppName | replaceStringCapitalize}}_RABBIT_URI="amqps://xrqlluoo:4hAUYGqztMsWyFdT5r65j4xudTw-AWl1@puffin.rmq2.cloudamqp.com/xrqlluoo"
