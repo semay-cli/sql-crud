@@ -2,7 +2,7 @@ package models
 
 import (
 	"time"
-	
+
 	{{- $break_7 := false }}
 	{{- range .Fields }}
 	{{- if eq .Type "sql.NullInt64" }}
@@ -23,6 +23,16 @@ type {{.Name}} struct {
 	{{end}}
 	CreatedAt time.Time {{.BackTick}}bson:"created_at,omitempty"{{.BackTick}}
     UpdatedAt time.Time {{.BackTick}}bson:"updated_at,omitempty"{{.BackTick}}
+}
+
+func (m *{{.Name}}) To{{.Name}}Get() *{{.Name}}Get {
+    return &{{.Name}}Get{
+        {{- range .Fields}}
+        {{if .Get}}{{.Name}}: m.{{.Name}},{{- end}}
+        {{- end}}
+        CreatedAt: m.CreatedAt,
+        UpdatedAt: m.UpdatedAt,
+    }
 }
 
 {{- $hasUUID := false }}
