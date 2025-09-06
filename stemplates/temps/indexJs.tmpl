@@ -1,6 +1,7 @@
 
 export { api } from './client';
 export { statsService } from './statsService';
+export { authService } from './authService';
 {{- range .Models}}
 export { {{.LowerName}}Service } from './{{.LowerName}}Service';
 {{- end }}

@@ -173,7 +173,7 @@ func handleProjectType(projectType, frame string, cmd *cobra.Command) {
 		if appName == "" {
 			fmt.Println("api needs app flag")
 		} else {
-			stemplates.InitProjectJSON()
+			// stemplates.InitProjectJSON()
 			stemplates.RenderData.ProjectName = stemplates.ProjectSettings.ProjectName
 			stemplates.RenderData.AppName = stemplates.ProjectSettings.AuthAppName
 			stemplates.RenderData.AppNames = stemplates.ProjectSettings.AppNames
