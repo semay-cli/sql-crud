@@ -11,13 +11,14 @@ import (
 
 type CacheService struct {
 	cache       *ristretto.Cache
+	cfg         *configs.EnvConfig
 	deletedKeys sync.Map
 }
 
-func NewCacheService() (*CacheService, error) {
-	number_of_counters, _ := strconv.ParseInt(configs.AppConfig.GetOrDefault("NUMBER_OF_COUNTERS", "250"), 10, 64)
-	cache_size, _ := strconv.ParseInt(configs.AppConfig.GetOrDefault("MAX_CACHE_SIZE", "250"), 10, 64)
-	buffer_items, _ := strconv.ParseInt(configs.AppConfig.GetOrDefault("BUFFER_ITEMS", "64"), 10, 64)
+func NewCacheService(cfg *configs.EnvConfig) (*CacheService, error) {
+	number_of_counters, _ := strconv.ParseInt(cfg.GetOrDefault("NUMBER_OF_COUNTERS", "250"), 10, 64)
+	cache_size, _ := strconv.ParseInt(cfg.GetOrDefault("MAX_CACHE_SIZE", "250"), 10, 64)
+	buffer_items, _ := strconv.ParseInt(cfg.GetOrDefault("BUFFER_ITEMS", "64"), 10, 64)
 
 	cache, err := ristretto.NewCache(&ristretto.Config{
 		NumCounters: number_of_counters, // Number of keys to track frequency
@@ -27,9 +28,8 @@ func NewCacheService() (*CacheService, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &CacheService{cache: cache}, nil
+	return &CacheService{cache: cache, cfg: cfg}, nil
 }
-
 
 func (c *CacheService) Get(key string) (any, bool) {
 	if _, deleted := c.deletedKeys.Load(key); deleted {
@@ -41,7 +41,7 @@ func (c *CacheService) Get(key string) (any, bool) {
 
 func (c *CacheService) Set(key string, value any) bool {
 	c.deletedKeys.Delete(key) // In case it's been soft-deleted befor
-	minutes, _ := strconv.Atoi(configs.AppConfig.GetOrDefault("BUFFER_ITEMS", "10"))
+	minutes, _ := strconv.Atoi(c.cfg.GetOrDefault("BUFFER_ITEMS", "10"))
 	ttl := time.Duration(minutes) * time.Minute
 	return c.cache.SetWithTTL(key, value, 1, ttl)
 }

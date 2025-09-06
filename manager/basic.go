@@ -46,6 +46,7 @@ var (
 				currentDir, _ := os.Getwd()
 				generate.GenerateMainAndManager(stemplates.RenderData)
 				generate.GenerateConfig(stemplates.RenderData)
+				generate.GenerateCrons(stemplates.RenderData)
 
 				// Handle appName if provided
 				if appName != "" {

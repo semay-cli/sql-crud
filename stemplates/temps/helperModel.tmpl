@@ -39,13 +39,12 @@ func (p *Pagination) Validate() error {
 	return nil
 }
 
-
 // Combine password and salt then hash them using the SHA-512
-func HashFunc(password string) string {
+func HashFunc(password string, cfg *configs.EnvConfig) string {
 
 	// var salt []byte
 	// get salt from env variable
-	salt := []byte(configs.AppConfig.Get("SECRETE_SALT"))
+	salt := []byte(cfg.Get("SECRETE_SALT"))
 
 	// Convert password string to byte slice
 	var pwdByte = []byte(password)
@@ -65,11 +64,10 @@ func HashFunc(password string) string {
 	return hashedPasswordHex
 }
 
-
 func GenerateRandomString(length int) (string, error) {
 	result := make([]byte, length)
 
-	for i := 0; i < length; i++ {
+	for i := range length {
 		index := rand.Intn(charsetLen)
 		result[i] = charset[index]
 	}

@@ -78,8 +78,8 @@ func InstallSSOhApp(userName, projectName, authAppName string) {
 	stemplates.ProjectSettings.CurrentAppName = authAppName
 
 	generate.GenerateTasks(stemplates.RenderData)
-	generate.GenerateConfigTestEnv(stemplates.RenderData)
-	generate.GenerateEchoCoverage(stemplates.RenderData)
+	// generate.GenerateConfigTestEnv(stemplates.RenderData)
+	// generate.GenerateEchoCoverage(stemplates.RenderData)
 	generate.GenerateEchoSetup(stemplates.RenderData)
 
 	generate.GenerateModels(stemplates.RenderData)
@@ -87,6 +87,7 @@ func InstallSSOhApp(userName, projectName, authAppName string) {
 	generate.GenerateServicesInit(stemplates.RenderData)
 	generate.GenerateServices(stemplates.RenderData)
 	generate.GenerateControllers(stemplates.RenderData)
+	generate.GenerateControllerInit(stemplates.RenderData)
 	generate.GenerateSSOLogin(stemplates.ProjectSettings)
 
 	stemplates.ProjectSettings.CurrentAppName = authAppName
@@ -103,6 +104,7 @@ func InstallSSOhApp(userName, projectName, authAppName string) {
 	stemplates.RenderData.ProjectName = stemplates.ProjectSettings.ProjectName
 	stemplates.RenderData.AppNames = stemplates.ProjectSettings.AppNames
 	generate.GenerateConfig(stemplates.RenderData)
+	generate.GenerateCrons(stemplates.RenderData)
 	generate.GenerateConfigEnv(stemplates.RenderData)
 	generate.GenerateConfigAppEnv(stemplates.RenderData)
 

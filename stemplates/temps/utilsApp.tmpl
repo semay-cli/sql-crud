@@ -1,4 +1,4 @@
-package services
+package  repository
 
 import (
 	"fmt"
@@ -27,15 +27,15 @@ type UserClaim struct {
 	UserID      int      {{.BackTick}}json:"user_id"{{.BackTick}}
 }
 
-func PasswordsMatch(hashedPassword, currPassword string) bool {
+func (repo *{{ .AuthAppName | toPascalCase }}Repository) PasswordsMatch(hashedPassword, currPassword string) bool {
 
-	var currPasswordHash = models.HashFunc(currPassword)
+	var currPasswordHash = models.HashFunc(currPassword,repo.Cfg)
 	return hashedPassword == currPasswordHash
 }
 
 // source of this token encode decode functions
 // https://github.com/gurleensethi/go-jwt-tutorial/blob/main/main.go
-func CreateJWTToken(user models.User, scopes, groups []string, duration int) (string, error) {
+func (repo *{{ .AuthAppName | toPascalCase }}Repository) CreateJWTToken(user models.User, scopes, groups []string, duration int) (string, error) {
 	my_claim := UserClaim{
 		RegisteredClaims: jwt.RegisteredClaims{},
 		Email:            user.Email,
@@ -52,7 +52,7 @@ func CreateJWTToken(user models.User, scopes, groups []string, duration int) (st
 		UserID:           int(user.ID),
 	}
 
-	salt_a, _ := GetJWTSalt()
+	salt_a, _ := repo.GetJWTSalt()
 	exp := time.Now().UTC().Add(time.Duration(duration) * time.Minute)
 	my_claim.ExpiresAt = jwt.NewNumericDate(exp)
 	my_claim.Issuer = "Blue Admin"
@@ -66,8 +66,8 @@ func CreateJWTToken(user models.User, scopes, groups []string, duration int) (st
 	return signedString, nil
 }
 
-func ParseJWTToken(jwtToken string) (UserClaim, error) {
-	salt_a, salt_b := GetJWTSalt()
+func (repo *{{ .AuthAppName | toPascalCase }}Repository) ParseJWTToken(jwtToken string) (UserClaim, error) {
+	salt_a, salt_b := repo.GetJWTSalt()
 	response_a := UserClaim{}
 	response_b := UserClaim{}
 

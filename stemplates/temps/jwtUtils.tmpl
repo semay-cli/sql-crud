@@ -1,12 +1,12 @@
-package services
+package repository
 
 import (
 	"math/rand"
 	"strconv"
 
 	"{{.ProjectName}}/{{.CurrentAppName}}/models"
-	"{{.ProjectName}}/configs"
-	
+	//"{{.ProjectName}}/configs"
+
 )
 
 const (
@@ -17,7 +17,7 @@ const (
 func GenerateRandomString(length int) (string, error) {
 	result := make([]byte, length)
 
-	for i := 0; i < length; i++ {
+	for i := range length {
 		index := rand.Intn(charsetLen)
 		result[i] = charset[index]
 	}
@@ -27,9 +27,9 @@ func GenerateRandomString(length int) (string, error) {
 
 
 
-func JWTSaltUpdate() {
+func (repo *{{ .CurrentAppName | toPascalCase }}Repository) JWTSaltUpdate() {
 	//  getting salt length from configuration file
-	salt_length, _ := strconv.Atoi(configs.AppConfig.Get("JWT_SALT_LENGTH"))
+	salt_length, _ := strconv.Atoi(repo.Cfg.Get("JWT_SALT_LENGTH"))
 
 	//  generating for salt A
 	salt_a, _ := GenerateRandomString(salt_length)
@@ -38,7 +38,7 @@ func JWTSaltUpdate() {
 	var jwt_object models.JWTSalt
 
 	// Fethching the JWT object if it exists
-	AppService.DB.Model(&models.JWTSalt{}).Where("id = ?", 1).First(&jwt_object)
+	repo.DB.Model(&models.JWTSalt{}).Where("id = ?", 1).First(&jwt_object)
 
 	// If it exists updating or creating if it does not exist
 	if jwt_object.ID == 1 {
@@ -46,8 +46,8 @@ func JWTSaltUpdate() {
 		jwt_object.SaltB = jwt_object.SaltA
 		jwt_object.SaltA = salt_a
 
-		tx := AppService.DB.Begin()
-		if err := AppService.DB.Updates(&jwt_object).Error; err != nil {
+		tx := repo.DB.Begin()
+		if err := repo.DB.Updates(&jwt_object).Error; err != nil {
 
 			tx.Rollback()
 		}
@@ -55,8 +55,8 @@ func JWTSaltUpdate() {
 
 		//Clear cache if updated
 		// Removing Cache if update sucess
-		cacheKey := "{{ .CurrentAppName | replaceString}}	_salt:1"
-		AppCacheService.Delete(cacheKey)
+		cacheKey := "blue_admin	_salt:1"
+		repo.Cache.Delete(cacheKey)
 
 	} else {
 		// generating salt b and creating new
@@ -64,7 +64,7 @@ func JWTSaltUpdate() {
 		jwt_object.SaltA = salt_a
 		jwt_object.SaltB = salt_b
 
-		tx := AppService.DB.Begin()
+		tx := repo.DB.Begin()
 		// add  data using transaction if values are valid
 		if err := tx.Create(&jwt_object).Error; err != nil {
 
@@ -77,28 +77,28 @@ func JWTSaltUpdate() {
 
 }
 
-func GetJWTSalt() (salt_a string, salt_b string) {
+func (repo *{{ .CurrentAppName | toPascalCase }}Repository) GetJWTSalt() (salt_a string, salt_b string) {
 
 	// checking Cache if it exists
-	cacheKey := "{{ .CurrentAppName | replaceString}}_salt:1"
-	if cachedJWTSalt, found := AppCacheService.Get(cacheKey); found {
+	cacheKey := "blue_admin_salt:1"
+	if cachedJWTSalt, found := repo.Cache.Get(cacheKey); found {
 		return cachedJWTSalt.(*models.JWTSaltGet).SaltA, cachedJWTSalt.(*models.JWTSaltGet).SaltB
 	}
 
 	var jwt_object models.JWTSalt
 	// Fethching the JWT object if it exists
-	AppService.DB.Model(&models.JWTSalt{}).Where("id = ?", 1).First(&jwt_object)
+	repo.DB.Model(&models.JWTSalt{}).Where("id = ?", 1).First(&jwt_object)
 
 	// check cache
 
 	salt_a = jwt_object.SaltA
 	salt_b = jwt_object.SaltB
 	if salt_a == "" {
-		JWTSaltUpdate()
+		repo.JWTSaltUpdate()
 	}
 
 	// Setting Cache before returning the user
-	AppCacheService.Set(cacheKey, &models.JWTSaltGet{SaltA: jwt_object.SaltA, SaltB: jwt_object.SaltB})
+	repo.Cache.Set(cacheKey, &models.JWTSaltGet{SaltA: jwt_object.SaltA, SaltB: jwt_object.SaltB})
 
 	return salt_a, salt_b
 

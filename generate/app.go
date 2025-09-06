@@ -22,7 +22,8 @@ func GenerateGlobalEchoAppMiddleware(data stemplates.Data) {
 }
 
 func GenerateAppEchoGlobal(data stemplates.Data) {
-	tmpl := stemplates.LoadTemplate("globalEchoApp")
+	tmpl := stemplates.LoadTemplate("globalEchoDig")
+	// tmpl := stemplates.LoadTemplate("globalEchoApp")
 
 	data.SetBackTick()
 	stemplates.WriteTemplateToFile("manager/app.go", tmpl, data)

@@ -42,6 +42,7 @@ func runControllerCommand(cmd *cobra.Command, args []string) {
 
 	// } else {
 	generate.GenerateControllers(stemplates.RenderData)
+	generate.GenerateControllerInit(stemplates.RenderData)
 	stemplates.CommonCMD()
 	// }
 }

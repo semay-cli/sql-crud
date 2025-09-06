@@ -1,4 +1,4 @@
-package services
+package repository
 
 import (
 	"context"
@@ -24,13 +24,13 @@ import (
 
 
 // Create inserts a new {{.LowerName}}
-func (s *AppDatabaseService) Create{{.Name}}(ctx context.Context, posted_{{.LowerName}} *models.{{.Name}}Post) (*models.{{.Name}}Get, error) {
+func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Context, posted_{{.LowerName}} *models.{{.Name}}Post) (*models.{{.Name}}Get, error) {
 	var created{{.Name}} = new(models.{{.Name}}Get)
 
 	err := s.withTransaction(ctx, func(tx *gorm.DB) error {
 			{{- range .Fields}} {{- if .Post}}
 				{{- if eq .Name "Password" }}
-			hashedPassword := models.HashFunc(posted_user.Password)
+			hashedPassword := models.HashFunc(posted_user.Password,s.Cfg)
 				{{- end }}
 			{{- end }}
 			{{- if eq .Name "UUID" }}
@@ -75,10 +75,10 @@ func (s *AppDatabaseService) Create{{.Name}}(ctx context.Context, posted_{{.Lowe
 }
 
 // GetOne fetches a {{.LowerName}} by ID
-func (s *AppDatabaseService) GetOne{{.Name}}(ctx context.Context, id string) (*models.{{.Name}}Get, error) {
+func (s *{{ .AppName | toPascalCase }}Repository) GetOne{{.Name}}(ctx context.Context, id string) (*models.{{.Name}}Get, error) {
     // checking Cache if it exists
    	cacheKey := "{{.LowerName}}:" + id
-	if cached{{.Name}}, found := AppCacheService.Get(cacheKey); found {
+	if cached{{.Name}}, found := s.Cache.Get(cacheKey); found {
 		return cached{{.Name}}.(*models.{{.Name}}Get), nil
 	}
 
@@ -98,13 +98,13 @@ func (s *AppDatabaseService) GetOne{{.Name}}(ctx context.Context, id string) (*m
 	}
 
     // Setting Cache before returning the user
-    AppCacheService.Set(cacheKey, &{{.LowerName}})
+    s.Cache.Set(cacheKey, &{{.LowerName}})
 
 	return &{{.LowerName}}, nil
 }
 
 // Get returns {{.LowerName}}s with paginatoin and search
-func (s *AppDatabaseService) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]any) ([]models.{{.Name}}Get, uint, error) {
+func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]any) ([]models.{{.Name}}Get, uint, error) {
 
 	// Build search query if any
 	// Create a base query
@@ -159,7 +159,7 @@ func (s *AppDatabaseService) Get{{.Name}}s(ctx context.Context, pagination model
 }
 
 // Update modifies a {{.Name}}s by ID
-func (s *AppDatabaseService) Update{{.Name}}(ctx context.Context, patch_{{.LowerName}} *models.{{.Name}}Patch, id string) (*models.{{.Name}}Get, error) {
+func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Context, patch_{{.LowerName}} *models.{{.Name}}Patch, id string) (*models.{{.Name}}Get, error) {
 	// update User
 	var updated{{.Name}} *models.{{.Name}}Get
 
@@ -174,7 +174,7 @@ func (s *AppDatabaseService) Update{{.Name}}(ctx context.Context, patch_{{.Lower
 			{{- if eq .Name "Password" }}
 			if patch_{{$.LowerName}}.{{.Name}} != nil {
 				// setting password string to hash
-				hashedPassword := models.HashFunc(*patch_{{$.LowerName}}.Password)
+				hashedPassword := models.HashFunc(*patch_{{$.LowerName}}.Password,s.Cfg)
 				updateFields["{{.Name | camelToSnake }}"] = hashedPassword
 			}
 			{{- else if eq .Name "ID" }}
@@ -189,7 +189,7 @@ func (s *AppDatabaseService) Update{{.Name}}(ctx context.Context, patch_{{.Lower
 			updateFields["updated_at"]=time.Now()
 
 
-			
+
 			// Update the document by ID
 			result := s.DB.WithContext(ctx).Model(&models.{{.Name}}{}).Where("id= ?", {{.LowerName}}_id).Updates(updateFields)
 			if result.Error != nil {
@@ -202,7 +202,7 @@ func (s *AppDatabaseService) Update{{.Name}}(ctx context.Context, patch_{{.Lower
 
 			// Removing Cache if update sucess
 			cacheKey := "{{.LowerName}}:" + id
-			AppCacheService.Delete(cacheKey)
+			s.Cache.Delete(cacheKey)
 
 			return nil
 		})
@@ -212,7 +212,7 @@ func (s *AppDatabaseService) Update{{.Name}}(ctx context.Context, patch_{{.Lower
 }
 
 // Delete removes a {{.LowerName}} by ID
-func (s *AppDatabaseService) Delete{{.Name}}(ctx context.Context, id string) error {
+func (s *{{ .AppName | toPascalCase }}Repository) Delete{{.Name}}(ctx context.Context, id string) error {
 
 	err := s.withTransaction(ctx, func(tx *gorm.DB) error {
 		objID, err := strconv.Atoi(id)
@@ -226,11 +226,10 @@ func (s *AppDatabaseService) Delete{{.Name}}(ctx context.Context, id string) err
 		}
 		// Removing Cache if delete sucess
 		cacheKey := "{{.LowerName}}:" + id
-		AppCacheService.Delete(cacheKey)
+		s.Cache.Delete(cacheKey)
 
 		return nil
 	})
 
 	return err
 }
-

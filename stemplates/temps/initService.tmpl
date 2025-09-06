@@ -1,37 +1,35 @@
-package services
+package repository
 
 import (
 	"context"
 	"{{ .ProjectName }}/cache"
+	"{{ .ProjectName }}/configs"
 	"gorm.io/gorm"
 )
 
-var AppCacheService *cache.CacheService
-var AppService AppDatabaseService
+
 
 // AppDatabase Service wraps Dababase service(SQL)
-type AppDatabaseService struct {
+type {{ .AppName | toPascalCase }}Repository struct {
 	DB *gorm.DB
+	Cache *cache.CacheService
+	Cfg   *configs.EnvConfig
 }
 
 
 
-func InitServices(client *gorm.DB) {
-	var err error
-	AppCacheService, err = cache.NewCacheService()
-	if err != nil {
-		panic("Unable to initialize cache service")
-	}
+func InitRepository(client *gorm.DB, cacheService *cache.CacheService, cfg *configs.EnvConfig) *{{ .AppName | toPascalCase }}Repository {
 
-	AppService = AppDatabaseService{
-		DB: client,
+	return &{{ .AppName | toPascalCase }}Repository{
+		DB:    client,
+		Cache: cacheService,
+		Cfg:   cfg,
 	}
 
 }
-
 
 // Utility function for transactions
-func (s *AppDatabaseService) withTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
+func (s *{{ .AppName | toPascalCase }}Repository ) withTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
     // Start the transaction with context (e.g., tracing)
     tx := s.DB.WithContext(ctx).Begin()
     if tx.Error != nil {
@@ -54,5 +52,3 @@ func (s *AppDatabaseService) withTransaction(ctx context.Context, fn func(tx *go
     // Commit if no errors
     return tx.Commit().Error
 }
-
-

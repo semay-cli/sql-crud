@@ -13,12 +13,9 @@ import (
 	{{ end }}
 	"net/http"
 	"strconv"
-
-	validator "github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 	"{{.ProjectName}}/common"
 	"{{.ProjectName}}/{{.AppName}}/models"
-	"{{.ProjectName}}/{{.AppName}}/services"
 	"{{.ProjectName}}/observe"
 )
 
@@ -38,7 +35,7 @@ import (
 // @Success 200 {object} common.ResponsePagination{data=[]models.{{.Name}}Get}
 // @Failure 404 {object} common.ResponseHTTP{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}} [get]
-func Get{{.Name}}s(contx echo.Context) error {
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx echo.Context) error {
 	//  Geting tracer
 	tracer := contx.Get("tracer").(*observe.RouteTracer)
 
@@ -74,7 +71,7 @@ func Get{{.Name}}s(contx echo.Context) error {
 	}
 
 	// Fetch {{.LowerName}}s from service
-	{{.LowerName}}s,totalCount, err := services.AppService.Get{{.Name}}s(tracer.Tracer, pagination, filteredSearchTerm)
+	{{.LowerName}}s,totalCount, err := ctrl.Svc.Get{{.Name}}s(tracer.Tracer, pagination, filteredSearchTerm)
 	if err != nil {
 		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
 			Success: false,
@@ -106,7 +103,7 @@ func Get{{.Name}}s(contx echo.Context) error {
 // @Success 200 {object} common.ResponseHTTP{data=models.{{.Name}}Get}
 // @Failure 404 {object} common.ResponseHTTP{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [get]
-func Get{{.Name}}ByID(contx echo.Context) error {
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}ByID(contx echo.Context) error {
 	//  Geting tracer
 	tracer := contx.Get("tracer").(*observe.RouteTracer)
 
@@ -114,7 +111,7 @@ func Get{{.Name}}ByID(contx echo.Context) error {
 	id := contx.Param("{{.LowerName}}_id")
 
     // Fetch {{.LowerName}} from service
-	{{.LowerName}}, err := services.AppService.GetOne{{.Name}}(tracer.Tracer, id)
+	{{.LowerName}}, err := ctrl.Svc.GetOne{{.Name}}(tracer.Tracer, id)
 	if err != nil {
 		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
 			Success: false,
@@ -144,13 +141,11 @@ func Get{{.Name}}ByID(contx echo.Context) error {
 // @Failure 400 {object} common.ResponseHTTP{}
 // @Failure 500 {object} common.ResponseHTTP{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}} [post]
-func Post{{.Name}}(contx echo.Context) error {
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx echo.Context) error {
 	//  Geting tracer
 	tracer := contx.Get("tracer").(*observe.RouteTracer)
 
 
-	// validator initialization
-	validate := validator.New()
 
 	//validating post data
 	posted_{{.LowerName}} := new(models.{{.Name}}Post)
@@ -165,7 +160,7 @@ func Post{{.Name}}(contx echo.Context) error {
 	}
 
 	// then validate structure
-	if err := validate.Struct(posted_{{.LowerName}}); err != nil {
+	if err := ctrl.Validator.Struct(posted_{{.LowerName}}); err != nil {
 		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
 			Success: false,
 			Message: err.Error(),
@@ -175,7 +170,7 @@ func Post{{.Name}}(contx echo.Context) error {
 
 
     // post {{.LowerName}} from service
-	{{.LowerName}}, err := services.AppService.Create{{.Name}}(tracer.Tracer, posted_{{.LowerName}})
+	{{.LowerName}}, err := ctrl.Svc.Create{{.Name}}(tracer.Tracer, posted_{{.LowerName}})
 	if err != nil {
 		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
 			Success: false,
@@ -205,12 +200,10 @@ func Post{{.Name}}(contx echo.Context) error {
 // @Failure 400 {object} common.ResponseHTTP{}
 // @Failure 500 {object} common.ResponseHTTP{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [patch]
-func Patch{{.Name}}(contx echo.Context) error {
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx echo.Context) error {
 	//  Geting tracer
 	tracer := contx.Get("tracer").(*observe.RouteTracer)
 
-	// validator initialization
-	validate := validator.New()
 
     //getting object_id from path param
     // validate path params
@@ -228,7 +221,7 @@ func Patch{{.Name}}(contx echo.Context) error {
 	}
 
     // then validate structure
-	if err := validate.Struct(patch_{{.LowerName}}); err != nil {
+	if err := ctrl.Validator.Struct(patch_{{.LowerName}}); err != nil {
 		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
 			Success: false,
 			Message: err.Error(),
@@ -239,7 +232,7 @@ func Patch{{.Name}}(contx echo.Context) error {
 
 
     // patch {{.LowerName}} from service
-	{{.LowerName}}, err := services.AppService.Update{{.Name}}(tracer.Tracer, patch_{{.LowerName}},id)
+	{{.LowerName}}, err := ctrl.Svc.Update{{.Name}}(tracer.Tracer, patch_{{.LowerName}},id)
 	if err != nil {
 		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
 			Success: false,
@@ -269,7 +262,7 @@ func Patch{{.Name}}(contx echo.Context) error {
 // @Failure 404 {object} common.ResponseHTTP{}
 // @Failure 503 {object} common.ResponseHTTP{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [delete]
-func Delete{{.Name}}(contx echo.Context) error {
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.Name}}(contx echo.Context) error {
 	//  Geting tracer
 	tracer := contx.Get("tracer").(*observe.RouteTracer)
 
@@ -279,7 +272,7 @@ func Delete{{.Name}}(contx echo.Context) error {
 
 
     // delete {{.LowerName}} from service
-	err := services.AppService.Delete{{.Name}}(tracer.Tracer, id)
+	err := ctrl.Svc.Delete{{.Name}}(tracer.Tracer, id)
 	if err != nil {
 		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
 			Success: false,
@@ -295,5 +288,3 @@ func Delete{{.Name}}(contx echo.Context) error {
 		Data:    nil,
 	})
 }
-
-

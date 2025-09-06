@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"unicode"
 
 	"fmt"
 	"strconv"
@@ -130,6 +131,43 @@ func ToLowerCaseName(s string) string {
 	return strings.ToLower(s)
 }
 
+// Capitalize first letter of a word
+func capitalize(word string) string {
+	if len(word) == 0 {
+		return ""
+	}
+	runes := []rune(word)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
+}
+
+// Convert "blue-admin" to "BlueAdmin"
+func ToPascalCase(input string) string {
+	parts := strings.Split(input, "-")
+	for i, part := range parts {
+		parts[i] = capitalize(part)
+	}
+	return strings.Join(parts, "")
+}
+
+// Function to extract the first letter of each word
+func getFirstLetters(input string) string {
+	// Split the string by hyphen and iterate over the parts
+	words := strings.FieldsFunc(input, func(r rune) bool {
+		return r == '-' || unicode.IsSpace(r)
+	})
+
+	// Collect the first letter of each word
+	var result strings.Builder
+	for _, word := range words {
+		if len(word) > 0 {
+			result.WriteRune(unicode.ToLower(rune(word[0]))) // Convert to lowercase if needed
+		}
+	}
+
+	return result.String()
+}
+
 var FuncMap = template.FuncMap{
 	"camelToSnake":            CamelToSnake,            // Register CamelToSnake function
 	"add":                     add,                     // Register Add function
@@ -150,6 +188,9 @@ var FuncMap = template.FuncMap{
 	"replaceStringCapitalize": replaceStringCapitalize, // Register hyphen with underscore
 	"formatSliceToString":     formatSliceToString,     // Register format slice to string functionD
 	"toLowerCaseName":         ToLowerCaseName,         // Register format slice to string functionD
+	"toPascalCase":            ToPascalCase,            // Register toPascalCase function
+	"capitalize":              capitalize,              // Register capitalize function
+	"getFirstLetters":         getFirstLetters,         // Register getFirstLetters function
 }
 
 func add(a int, b int) int {

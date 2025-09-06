@@ -1,4 +1,4 @@
-package services
+package repository
 
 import (
 	"fmt"
@@ -6,19 +6,19 @@ import (
 	"{{.ProjectName}}/{{ .CurrentAppName}}/models"
 	)
 
-func (s *AppDatabaseService) Login(email, password string) (string, error) {
+func (s *{{ .CurrentAppName | toPascalCase }}Repository) Login(email, password string) (string, error) {
 	var user models.User
 	if err := s.DB.Where("email = ?", email).First(&user).Error; err != nil {
 		return "", fmt.Errorf("user not found: %w", err)
 	}
 
-	if !PasswordsMatch(user.Password, password) {
+	if !s.PasswordsMatch(user.Password, password) {
 		return "", fmt.Errorf("invalid credentials")
 	}
 
 	permissions := []string{"read", "write"} // Example permissions
 	groups := []string{"admin", "user"}      // Example groups
-	token, err := CreateJWTToken(user, permissions, groups, 60)
+	token, err := s.CreateJWTToken(user, permissions, groups, 60)
 	if err != nil {
 		return "", fmt.Errorf("error creating token: %w", err)
 	}
@@ -26,15 +26,15 @@ func (s *AppDatabaseService) Login(email, password string) (string, error) {
 	return token, nil
 }
 
-func (s *AppDatabaseService) DecodeToken(tokenString string) (UserClaim, error) {
-	claims, err := ParseJWTToken(tokenString)
+func (s *{{ .CurrentAppName | toPascalCase }}Repository) DecodeToken(tokenString string) (UserClaim, error) {
+	claims, err := s.ParseJWTToken(tokenString)
 	if err != nil {
 		return UserClaim{}, fmt.Errorf("error parsing token: %w", err)
 	}
 	return claims, nil
 }
 
-func (s *AppDatabaseService) RefreshToken(tokenString string) (string, error) {
+func (s *{{ .CurrentAppName | toPascalCase }}Repository) RefreshToken(tokenString string) (string, error) {
 	claims, err := s.DecodeToken(tokenString)
 	if err != nil {
 		return "", err
@@ -42,7 +42,7 @@ func (s *AppDatabaseService) RefreshToken(tokenString string) (string, error) {
 
 	// Here you can add logic to check if the token is close to expiration
 	// and refresh it accordingly. For now, we will just create a new token.
-	newToken, err := CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 60)
+	newToken, err := s.CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 60)
 	if err != nil {
 		return "", fmt.Errorf("error refreshing token: %w", err)
 	}
@@ -51,7 +51,7 @@ func (s *AppDatabaseService) RefreshToken(tokenString string) (string, error) {
 }
 
 
-func (s *AppDatabaseService) GetUserDetails(tokenString string) (map[string]interface{}, error) {
+func (s *{{ .CurrentAppName | toPascalCase }}Repository) GetUserDetails(tokenString string) (map[string]interface{}, error) {
 	// Step 1: Decode the token to get claims
 	claims, err := s.DecodeToken(tokenString)
 	if err != nil {

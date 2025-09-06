@@ -4,23 +4,34 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"strconv"
 
-	""{{ .ProjectName }}/configs""
+	"{{ .ProjectName }}/configs"
 	"github.com/redis/go-redis/v9"
 )
 
-type CacheService struct {
+type RedisCacheService struct {
 	client *redis.Client
 	ttl    time.Duration
 	prefix string // <-- new field for key namespace
 }
 
+func atoi(s string) int {
+    i, err := strconv.Atoi(s)
+    if err != nil {
+        // Handle error: possibly log or panic
+        return 0
+    }
+    return i
+}
+
+
 // NewCacheService creates a new CacheService with Redis connection and key prefix
-func NewCacheService(cfg *common.Config) (*CacheService, error) {
+func NewRedisCacheService(appName string ,cfg *configs.EnvConfig) (*RedisCacheService, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     cfg.{{ .AppName | replaceStringCapitalize }}_RedisURL,
-		Password: cfg.{{ .AppName | replaceStringCapitalize }}_RedisPassword,
-		DB:       cfg.{{ .AppName | replaceStringCapitalize }}_RedisDB,
+		Addr:     cfg.Get(fmt.Sprintf("%v_RedisURL", appName)),
+		Password: cfg.Get(fmt.Sprintf("%v__RedisPassword", appName)),
+		DB:       atoi(cfg.Get(fmt.Sprintf("%v_RedisDB", appName))),
 	})
 
 	ctx := context.Background()
@@ -28,22 +39,25 @@ func NewCacheService(cfg *common.Config) (*CacheService, error) {
 		return nil, err
 	}
 
-	return &CacheService{
+    cacheTTL := time.Duration(atoi(cfg.Get(fmt.Sprintf("%v_RedisTTL", appName)))) * time.Minute
+
+
+	return &RedisCacheService{
 		client: client,
-		ttl:    time.Duration(cfg.RedisTTL) * time.Minute,
-		prefix: cfg.{{ .AppName | replaceStringCapitalize }}_RedisPrefix, // <-- assumes you add this to your config
+		ttl:    cacheTTL,
+		prefix: cfg.Get(fmt.Sprintf("%v_RedisPrefix", appName)), // <-- assumes you add this to your config
 	}, nil
 }
 
 // namespaced returns a namespaced version of the key
-func (c *CacheService) namespaced(key string) string {
+func (c *RedisCacheService) namespaced(key string) string {
 	if c.prefix == "" {
 		return key
 	}
 	return fmt.Sprintf("%s:%s", c.prefix, key)
 }
 
-func (c *CacheService) Get(ctx context.Context, key string) (any, bool) {
+func (c *RedisCacheService) Get(ctx context.Context, key string) (any, bool) {
 	key = c.namespaced(key)
 
 	val, err := c.client.Get(ctx, key).Result()
@@ -56,29 +70,29 @@ func (c *CacheService) Get(ctx context.Context, key string) (any, bool) {
 	return val, true
 }
 
-func (c *CacheService) Set(ctx context.Context, key string, value any) bool {
+func (c *RedisCacheService) Set(ctx context.Context, key string, value any) bool {
 	key = c.namespaced(key)
 
 	err := c.client.Set(ctx, key, value, c.ttl).Err()
 	return err == nil
 }
 
-func (c *CacheService) SetWithTTL(ctx context.Context, key string, value any, ttl time.Duration) bool {
+func (c *RedisCacheService) SetWithTTL(ctx context.Context, key string, value any, ttl time.Duration) bool {
 	key = c.namespaced(key)
 
 	err := c.client.Set(ctx, key, value, ttl).Err()
 	return err == nil
 }
 
-func (c *CacheService) Delete(ctx context.Context, key string) {
+func (c *RedisCacheService) Delete(ctx context.Context, key string) {
 	key = c.namespaced(key)
 	c.client.Del(ctx, key)
 }
 
-func (c *CacheService) Close() error {
+func (c *RedisCacheService) Close() error {
 	return c.client.Close()
 }
 
-func (c *CacheService) IsHealthy() bool {
+func (c *RedisCacheService) IsHealthy() bool {
 	return c.client.Ping(context.Background()).Err() == nil
 }

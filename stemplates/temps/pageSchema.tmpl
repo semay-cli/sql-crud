@@ -5,7 +5,7 @@ export const {{.LowerName}}PostSchema = z.object({
     {{- range .Fields}}{{- if .Post}} {{.LowerName}}: z.string(), {{- end}}
 {{end}}});
 
-export type CustomerFormPostValues = z.infer<typeof customerPostSchema>;
+export type {{.Name}}FormPostValues = z.infer<typeof {{.LowerName}}PostSchema>;
 
 
 export const {{.LowerName}}PatchSchema = z.object({
@@ -13,4 +13,4 @@ export const {{.LowerName}}PatchSchema = z.object({
 {{end}}});
 
 
-export type CustomerFormPatchValues = z.infer<typeof {{.LowerName}}PatchSchema>;
+export type {{.Name}}FormPatchValues = z.infer<typeof {{.LowerName}}PatchSchema>;

@@ -27,3 +27,13 @@ func GenerateControllers(data stemplates.Data) {
 	}
 
 }
+
+func GenerateControllerInit(data stemplates.Data) {
+	inittmpl := stemplates.LoadTemplate("initControllers")
+	if err := os.MkdirAll("controllers", os.ModePerm); err != nil {
+		panic("could not create directory")
+	}
+
+	stemplates.WriteTemplateToFile("controllers/init.go", inittmpl, data)
+
+}

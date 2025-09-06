@@ -15,6 +15,15 @@ func GenerateConfig(data stemplates.Data) {
 	stemplates.WriteTemplateToFile("configs/configs.go", tmpl, data)
 }
 
+func GenerateCrons(data stemplates.Data) {
+	tmpl := stemplates.LoadTemplate("chron")
+	err := os.MkdirAll("crons", os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+	stemplates.WriteTemplateToFile("crons/cron.go", tmpl, data)
+}
+
 func GenerateConfigEnv(data stemplates.Data) {
 	tmpl := stemplates.LoadTemplate("env")
 

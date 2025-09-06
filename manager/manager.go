@@ -9,10 +9,10 @@ import (
 
 var (
 	goFrame = &cobra.Command{
-		Use:           "sql-crud",
-		Short:         "SQL – command-line tool to aid structure you ECHO backend projects for API with gorm",
-		Long:          "ECHO – command-line tool to aid structure you ECHO backend projects for API with gorm",
-		Version:       "0.1.6",
+		Use:           "AppMan",
+		Short:         "AppMan – command-line tool to aid structure you fiber backend projects with gorm",
+		Long:          "Manager File Framed by go frame",
+		Version:       "0.0.0",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}

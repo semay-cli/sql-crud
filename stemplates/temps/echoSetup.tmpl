@@ -25,7 +25,7 @@ import (
 
 
 //  Please Note the sequence you mount the middlewares
-func SetupRoutes(app *echo.Echo) {
+func SetupRoutes(app *echo.Echo,  ctrls *controllers.{{ .AppName | toPascalCase }}Controller) {
 	logOutput, _ := logs.Logfile("{{ .AppName | replaceString }}")
 
 	app.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
@@ -39,29 +39,27 @@ func SetupRoutes(app *echo.Echo) {
 	// then authentication middlware
 	gapp := app.Group("/api/v1/{{.AppName | replaceString}}")
 
-	// the Otel spanner middleware
-	gapp.Use(otelechospanstarter)
 
 	{{ if eq .AuthAppName .CurrentAppName }}
-	gapp.POST("/login", controllers.Login).Name = "login"
-	gapp.GET("/user/details", controllers.GetUserDetails).Name = "user_details"
+	gapp.POST("/login", ctrls.Login).Name = "login"
+	gapp.GET("/user/details", ctrls.GetUserDetails).Name = "user_details"
 	{{- end}}
 
 	{{- range .Models}}
-	gapp.GET("/{{.LowerName}}", controllers.Get{{.Name}}s).Name = "{{.AppName | replaceString}}_can_view_{{.LowerName}}"
-	gapp.GET("/{{.LowerName}}/:{{.LowerName}}_id", controllers.Get{{.Name}}ByID).Name = "{{.AppName | replaceString}}_can_view_{{.LowerName}}"
-	gapp.POST("/{{.LowerName}}", controllers.Post{{.Name}}).Name = "{{.AppName | replaceString}}_can_add_{{.LowerName}}"
-	gapp.PATCH("/{{.LowerName}}/:{{.LowerName}}_id", controllers.Patch{{.Name}}).Name = "{{.AppName | replaceString}}_can_change_{{.LowerName}}"
-	gapp.DELETE("/{{.LowerName}}/:{{.LowerName}}_id", controllers.Delete{{.Name}}).Name = "{{.AppName | replaceString}}_can_delete_{{.LowerName}}"
-	
+	gapp.GET("/{{.LowerName}}", ctrls.Get{{.Name}}s).Name = "{{.AppName | replaceString}}_can_view_{{.LowerName}}"
+	gapp.GET("/{{.LowerName}}/:{{.LowerName}}_id", ctrls.Get{{.Name}}ByID).Name = "{{.AppName | replaceString}}_can_view_{{.LowerName}}"
+	gapp.POST("/{{.LowerName}}", ctrls.Post{{.Name}}).Name = "{{.AppName | replaceString}}_can_add_{{.LowerName}}"
+	gapp.PATCH("/{{.LowerName}}/:{{.LowerName}}_id", ctrls.Patch{{.Name}}).Name = "{{.AppName | replaceString}}_can_change_{{.LowerName}}"
+	gapp.DELETE("/{{.LowerName}}/:{{.LowerName}}_id", ctrls.Delete{{.Name}}).Name = "{{.AppName | replaceString}}_can_delete_{{.LowerName}}"
+
 	{{range .Relations}}
-	gapp.POST("/{{.LowerParentName}}{{.LowerFieldName}}/:{{.LowerFieldName}}_id/:{{.LowerParentName}}_id",controllers.Add{{.FieldName}}To{{.ParentName}}).Name = "{{.AppName | replaceString}}_can_add_{{.LowerFieldName}}"
-	gapp.DELETE("/{{.LowerParentName}}{{.LowerFieldName}}/:{{.LowerFieldName}}_id/:{{.LowerParentName}}_id",controllers.Delete{{.FieldName}}From{{.ParentName}}).Name = "{{.AppName | replaceString}}_can_delete_{{.LowerFieldName}}"
-	gapp.GET("/{{.LowerParentName}}{{.LowerFieldName}}/:{{.LowerParentName}}_id",controllers.Get{{.FieldName}}sOf{{.ParentName}}s).Name = "{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}"
-	gapp.GET("/{{.LowerFieldName}}noncomplement{{.LowerParentName}}/:{{.LowerParentName}}_id",controllers.GetAll{{.FieldName}}sOf{{.ParentName}}s).Name = "{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}complement"
-	gapp.GET("/{{.LowerFieldName}}complement{{.LowerParentName}}/:{{.LowerParentName}}_id",controllers.Get{{.FieldName}}Complement{{.ParentName}}s).Name = "{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}complement"
+	gapp.POST("/{{.LowerParentName}}{{.LowerFieldName}}/:{{.LowerFieldName}}_id/:{{.LowerParentName}}_id",ctrls.Add{{.FieldName}}To{{.ParentName}}).Name = "{{.AppName | replaceString}}_can_add_{{.LowerFieldName}}"
+	gapp.DELETE("/{{.LowerParentName}}{{.LowerFieldName}}/:{{.LowerFieldName}}_id/:{{.LowerParentName}}_id",ctrls.Delete{{.FieldName}}From{{.ParentName}}).Name = "{{.AppName | replaceString}}_can_delete_{{.LowerFieldName}}"
+	gapp.GET("/{{.LowerParentName}}{{.LowerFieldName}}/:{{.LowerParentName}}_id",ctrls.Get{{.FieldName}}sOf{{.ParentName}}s).Name = "{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}"
+	gapp.GET("/{{.LowerFieldName}}noncomplement{{.LowerParentName}}/:{{.LowerParentName}}_id",ctrls.GetAll{{.FieldName}}sOf{{.ParentName}}s).Name = "{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}complement"
+	gapp.GET("/{{.LowerFieldName}}complement{{.LowerParentName}}/:{{.LowerParentName}}_id",ctrls.Get{{.FieldName}}Complement{{.ParentName}}s).Name = "{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}complement"
 	{{end}}
-	
+
 	{{- end}}
 
 

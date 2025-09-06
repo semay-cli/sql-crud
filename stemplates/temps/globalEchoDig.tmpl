@@ -1,0 +1,267 @@
+package manager
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"time"
+
+
+	{{- range .AppNames}}
+	{{ . | replaceString }}"{{$.ProjectName}}/{{ . }}"
+	{{ . | replaceString }}_svc "{{$.ProjectName}}/{{ . }}/repository"
+	{{ . | replaceString }}_ctrl "{{$.ProjectName}}/{{ . }}/controllers"
+	{{- end }}
+
+	"{{.ProjectName}}/cache"
+	"{{.ProjectName}}/configs"
+	"{{.ProjectName}}/crons"
+	"{{.ProjectName}}/database"
+	"{{.ProjectName}}/observe"
+
+	echoSwagger "github.com/bushubdegefu/echo-swagger"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/log"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/robfig/cron/v3"
+	"github.com/spf13/cobra"
+	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.uber.org/dig"
+	"golang.org/x/time/rate"
+	"gorm.io/gorm"
+)
+
+var (
+	app_otel string
+	app_tls  string
+
+	echocli = &cobra.Command{
+		Use:   "run",
+		Short: "Run Development server",
+		Long:  "Run development server",
+		Run: func(cmd *cobra.Command, args []string) {
+			container := buildContainer()
+			err := container.Invoke(func(deps struct {
+				dig.In
+				App                *echo.Echo
+				Cfg                *configs.EnvConfig
+				{{- range .AppNames}}
+				{{ . | toPascalCase }}Ctrl      *{{ . | replaceString }}_ctrl.{{ . | toPascalCase }}Controller           `name:"{{ . | replaceString }}_controller"`
+
+				{{- end}}
+				Scheduler          *crons.ScheduledService
+			}) {
+				// Register routes with their respective controllers
+				{{- range .AppNames}}
+				{{ . | replaceString }}.SetupRoutes(deps.App, deps.{{ . | toPascalCase }}Ctrl)
+				{{- end}}
+
+				// starting shceduled tasks
+				deps.Scheduler.Start()
+
+				// starting server
+				go startServer(deps.App, deps.Cfg)
+
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				waitForShutdown(deps.App, ctx)
+			})
+			if err != nil {
+				log.Fatalf("Error starting application: %v", err)
+			}
+		},
+	}
+)
+
+
+
+// ---- Echo Setup ----
+
+func NewEchoApp(cfg *configs.EnvConfig, appTracer oteltrace.Tracer, prom *prometheus.Registry) *echo.Echo {
+	app := echo.New()
+
+	app.Use(middleware.Recover())
+	app.Use(middleware.CORS())
+
+	// 👇 Custom OpenTelemetry middleware
+	app.Use(NewOTelEchoSpanStarter(appTracer))
+	observe.SetupPrometheusMetrics(app, cfg)
+	app.Use(observe.PrometheusMiddleware(cfg.Get("APP_NAME"), prom))
+
+	// Rate limit middleware
+	configLimit, _ := strconv.ParseFloat(cfg.GetOrDefault("RATE_LIMIT_PER_SECOND", "50000"), 64)
+	app.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(rate.Limit(configLimit))))
+
+	app.Use(middleware.RecoverWithConfig(middleware.RecoverConfig{
+		StackSize: 1 << 10,
+		LogLevel:  log.ERROR,
+	}))
+
+	MountGlobalMiddleware(app)
+
+		{{- if eq .AuthAppType  "sso" }}
+	// Serve static files from the "dist/django_admin_ui" folder
+	app.Static("/", "./dist/sso_admin_ui")
+
+	// Handle "/admin/*" route and send the "index.html" file
+	app.GET("/admin/*", func(c echo.Context) error {
+		return c.File("./dist/sso_admin_ui/index.html")
+	}).Name = "Admin_UI"
+
+	{{- end }}
+
+    // OpenAPI documentation
+	{{- range .AppNames}}
+	//  {{ . }} Swagger Docs
+	app.GET("/{{ . | replaceString }}/docs/doc.json", func(contx echo.Context) error {
+			return contx.File("{{ . }}/docs/swagger.json")
+		}).Name = "{{ . | replaceString}}_docs_json"
+
+	app.GET("/{{ . | replaceString}}/docs/*", echoSwagger.New(echoSwagger.Config{
+		InstanceName: "{{ . | replaceString}}",
+		URL:          "/{{ . | replaceString }}/docs/doc.json", // Match the served JSON file
+	})).Name = "{{ . | replaceString}}_docs"
+	{{- end }}
+
+
+	// /metrics route
+	observe.InitProm(prom, cfg)
+	observe.RegisterPrometheusEndpoint(app, prom)
+
+	// blue_admin.SetupRoutes(app)
+	// shipping_portal.SetupRoutes(app)
+
+	return app
+}
+
+// ---- Graceful Shutdown ----
+
+func waitForShutdown(app *echo.Echo, ctx context.Context) {
+	<-ctx.Done()
+	fmt.Println("Gracefully shutting down...")
+
+	ctxTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := app.Shutdown(ctxTimeout); err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println("Shutdown complete.")
+}
+
+// ---- Start Server ----
+
+func startServer(app *echo.Echo, cfg *configs.EnvConfig) {
+	if app_otel == "on" {
+		tp := observe.InitTracer(cfg)
+		defer func() {
+			if err := tp.Shutdown(context.Background()); err != nil {
+				log.Printf("Error shutting down tracer provider: %v", err)
+			}
+		}()
+	}
+
+	port := cfg.Get("HTTP_PORT")
+	addr := "0.0.0.0:" + port
+
+	if app_tls == "on" {
+		app.Logger.Fatal(app.StartTLS(addr, "./server.pem", "./server-key.pem"))
+	} else {
+		app.Logger.Fatal(app.Start(addr))
+	}
+}
+
+// ---- Dependency Injection Container ----
+
+func buildContainer() *dig.Container {
+	container := dig.New()
+
+	mustProvide := func(err error) {
+		if err != nil {
+			panic(fmt.Errorf("dig provide failed: %w", err))
+		}
+	}
+
+	// Provide configuration
+	mustProvide(container.Provide(configs.NewEnvConfig))
+
+	// Provide Cron engine
+	container.Provide(func() *cron.Cron {
+		return cron.New()
+	})
+
+	// Initialize otel Tracer
+	mustProvide(container.Provide(observe.NewAppTracer))
+
+	// Provide cache
+	mustProvide(container.Provide(cache.NewCacheService))
+
+	// Provide Prometheus Registry
+	mustProvide(container.Provide(func() *prometheus.Registry {
+		return prometheus.NewRegistry()
+	}))
+
+	{{ range .AppNames}}
+	// Provide named DBs
+	mustProvide(container.Provide(func(cfg *configs.EnvConfig) (*gorm.DB, error) {
+		return database.ReturnSession("{{ . | replaceString }}", cfg)
+	}, dig.Name("{{ . | replaceString }}_db")))
+	{{- end }}
+
+
+	{{ range .AppNames}}
+	// Provide {{ . | replaceString }} repository
+	mustProvide(container.Provide(func(in struct {
+		dig.In
+		DB    *gorm.DB `name:"{{ . | replaceString }}_db"`
+		Cache *cache.CacheService
+		Cfg   *configs.EnvConfig
+	}) *{{ . | replaceString }}_svc.{{ . | toPascalCase }}Repository  {
+		return {{ . | replaceString }}_svc.InitRepository(in.DB, in.Cache, in.Cfg)
+	}, dig.Name("{{ . | replaceString }}_repo")))
+
+	{{- end }}
+
+	{{ range .AppNames}}
+	// Provide controllers
+	mustProvide(container.Provide(func(in struct {
+		dig.In
+		Svc *{{ . | replaceString }}_svc.{{ . | toPascalCase }}Repository `name:"{{ . | replaceString }}_repo"`
+	}) *{{ . | replaceString }}_ctrl.{{ . | toPascalCase }}Controller {
+		return blue_admin_ctrl.New{{ . | toPascalCase }}Controller(in.Svc)
+	}, dig.Name("{{ . | replaceString }}_controller")))
+	{{- end }}
+
+	//  Intitialize chron service
+	mustProvide(container.Provide(func(in struct {
+		dig.In
+		Crn   *cron.Cron
+		Cfg   *configs.EnvConfig
+	{{- range .AppNames}}
+		{{ . | toPascalCase }}Repo *{{ . | replaceString }}_svc.{{ . | toPascalCase }}Repository           `name:"{{ . | replaceString }}_repo"`
+	{{- end }}
+	}) *crons.ScheduledService {
+		return crons.NewScheduledService(in.Crn, in.Cfg,
+	{{- range .AppNames}}
+		in.{{ . | toPascalCase }}Repo,
+	{{- end }}
+		)
+	}))
+
+
+	// Provide Echo app
+	mustProvide(container.Provide(func(cfg *configs.EnvConfig, appTracer oteltrace.Tracer, prom *prometheus.Registry) *echo.Echo {
+		return NewEchoApp(cfg, appTracer, prom)
+	}))
+
+	return container
+}
+
+// ---- CLI Flags ----
+
+func init() {
+	echocli.Flags().StringVar(&app_otel, "otel", "off", "Enable OpenTelemetry tracing (on/off)")
+	echocli.Flags().StringVar(&app_tls, "tls", "off", "Enable TLS (on/off)")
+	goFrame.AddCommand(echocli)
+}

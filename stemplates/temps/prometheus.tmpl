@@ -44,17 +44,14 @@ var (
 	)
 )
 
-func InitProm(prom *prometheus.Registry) {
-	// Register metrics
+func InitProm(prom *prometheus.Registry, cfg *configs.EnvConfig) {
 	prom.MustRegister(cpuUsage)
 	prom.MustRegister(memUsage)
 	prom.MustRegister(httpDuration)
-
-	// Start collecting system metrics in a goroutine
-	go collectSystemMetrics()
+	go collectSystemMetrics(cfg)
 }
 
-func collectSystemMetrics() {
+func collectSystemMetrics(cfg *configs.EnvConfig) {
 	for {
 		// Get CPU usage
 		cpuPercent, err := cpu.Percent(0, false)
@@ -62,7 +59,7 @@ func collectSystemMetrics() {
 			log.Println("Error getting CPU usage:", err)
 		} else {
 			// Set CPU usage in the metric
-			cpuUsage.WithLabelValues("total", configs.AppConfig.Get("APP_NAME")).Set(cpuPercent[0])
+			cpuUsage.WithLabelValues("total", cfg.Get("APP_NAME")).Set(cpuPercent[0])
 		}
 
 		// Get memory usage
@@ -71,7 +68,7 @@ func collectSystemMetrics() {
 			log.Println("Error getting memory usage:", err)
 		} else {
 			// Set memory usage in the metric
-			memUsage.WithLabelValues("total", configs.AppConfig.Get("APP_NAME")).Set(float64(v.Used) / float64(v.Total) * 100)
+			memUsage.WithLabelValues("total", cfg.Get("APP_NAME")).Set(float64(v.Used) / float64(v.Total) * 100)
 		}
 
 		// Sleep for 10 seconds before checking again
@@ -93,10 +90,10 @@ func WrapHTTPHandler(h http.Handler) echo.HandlerFunc {
 	}
 }
 
-func SetupPrometheusMetrics(app *echo.Echo) {
+func SetupPrometheusMetrics(app *echo.Echo, cfg *configs.EnvConfig) {
 	// Initialize Prometheus registry
 	prom := prometheus.NewRegistry()
-	InitProm(prom)
+	InitProm(prom, cfg)
 
 	app.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -108,7 +105,7 @@ func SetupPrometheusMetrics(app *echo.Echo) {
 			httpDuration.WithLabelValues(c.Request().Method, // HTTP Method (GET, POST, etc.)
 				c.Request().URL.Path,                   // Request Path (e.g., "/api/v1/resource")
 				fmt.Sprintf("%d", c.Response().Status), // Status code
-				configs.AppConfig.Get("APP_NAME")).Observe(duration)
+				cfg.Get("APP_NAME")).Observe(duration)
 
 			return err
 		}
@@ -117,4 +114,27 @@ func SetupPrometheusMetrics(app *echo.Echo) {
 	// return err
 	// Expose the /metrics endpoint for Prometheus to scrape
 	app.GET("/metrics", WrapHTTPHandler(RegisterMetricsHandler(prom)))
+}
+
+func PrometheusMiddleware(appName string, prom *prometheus.Registry) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			start := time.Now()
+			err := next(c)
+			duration := time.Since(start).Seconds()
+
+			httpDuration.WithLabelValues(
+				c.Request().Method,
+				c.Path(),
+				fmt.Sprintf("%d", c.Response().Status),
+				appName,
+			).Observe(duration)
+
+			return err
+		}
+	}
+}
+
+func RegisterPrometheusEndpoint(e *echo.Echo, prom *prometheus.Registry) {
+	e.GET("/metrics", WrapHTTPHandler(RegisterMetricsHandler(prom)))
 }

@@ -6,15 +6,14 @@ import (
 
 	{{- if eq .AuthAppName .CurrentAppName }}
 	"time"
-	
+
 
 	"{{.ProjectName}}/{{ .CurrentAppName}}/models"
-	"{{.ProjectName}}/{{ .CurrentAppName}}/services"
+
 
 	{{- end }}
 	"{{.ProjectName}}/common"
 	"{{.ProjectName}}/observe"
-	validator "github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 )
 
@@ -46,12 +45,10 @@ type TokenResponse struct {
 // @Failure 404 {object} common.ResponseHTTP{}
 // @Failure 503 {object} common.ResponseHTTP{}
 // @Router /{{.CurrentAppName | replaceString}}/login [post]
-func Login(contx echo.Context) error {
+func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Context) error {
 	//  Geting tracer
 	tracer := contx.Get("tracer").(*observe.RouteTracer)
 
-	// validator initialization
-	validate := validator.New()
 
 	//validating post data
 	login_request := new(LoginPost)
@@ -67,17 +64,17 @@ func Login(contx echo.Context) error {
 	}
 
 	// then validate structure
-	if err := validate.Struct(login_request); err != nil {
+	if err := ctrl.Validator.Struct(login_request); err != nil {
 		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
 			Success: false,
 			Message: err.Error(),
 			Data:    nil,
 		})
 	}
-    service := services.AppService
+    repo := ctrl.Svc
 	switch login_request.GrantType {
 	case "authorization_code":
-		token, err := service.Login(login_request.Email, login_request.Password)
+		token, err := repo.Login(login_request.Email, login_request.Password)
 		if err != nil {
 			return contx.JSON(http.StatusUnauthorized, common.ResponseHTTP{
 				Success: false,
@@ -85,23 +82,23 @@ func Login(contx echo.Context) error {
 				Data:    nil,
 			})
 		}
-		claims, _ := services.ParseJWTToken(token)
+		claims, _ := repo.ParseJWTToken(token)
 		accessString := token
-		refreshString, _ := services.CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 65)
+		refreshString, _ := repo.CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 65)
 		data := TokenResponse{
 			AccessToken:  accessString,
 			RefreshToken: refreshString,
 			TokenType:    "Bearer",
 		}
 		// Optionally update last login
-		service.DB.WithContext(tracer.Tracer).Model(&models.User{}).Where("id = ?", claims.UserID).Update("last_login", time.Now())
+		repo.DB.WithContext(tracer.Tracer).Model(&models.User{}).Where("id = ?", claims.UserID).Update("last_login", time.Now())
 		return contx.JSON(http.StatusAccepted, common.ResponseHTTP{
 			Success: true,
 			Message: "Authorization Granted",
 			Data:    data,
 		})
 	case "refresh_token":
-		newToken, err := service.RefreshToken(login_request.Token)
+		newToken, err := repo.RefreshToken(login_request.Token)
 		if err != nil {
 			return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
 				Success: false,
@@ -109,8 +106,8 @@ func Login(contx echo.Context) error {
 				Data:    nil,
 			})
 		}
-		claims, _ := services.ParseJWTToken(newToken)
-		refreshString, _ := services.CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 65)
+		claims, _ := repo.ParseJWTToken(newToken)
+		refreshString, _ := repo.CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 65)
 		data := TokenResponse{
 			AccessToken:  newToken,
 			RefreshToken: refreshString,
@@ -122,7 +119,7 @@ func Login(contx echo.Context) error {
 			Data:    data,
 		})
 	case "token_decode":
-		claims, err := service.DecodeToken(login_request.Token)
+		claims, err := repo.DecodeToken(login_request.Token)
 		if err != nil {
 			return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
 				Success: false,
@@ -156,7 +153,7 @@ func Login(contx echo.Context) error {
 // @Failure 401 {object} common.ResponseHTTP
 // @Failure 500 {object} common.ResponseHTTP
 // @Router /{{.CurrentAppName | replaceString}}/user/details [get]
-func GetUserDetails(contx echo.Context) error {
+func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) GetUserDetails(contx echo.Context) error {
 	authHeader := contx.Request().Header.Get("X-APP-TOKEN")
 	if authHeader == "" {
 		return contx.JSON(http.StatusUnauthorized, common.ResponseHTTP{
@@ -167,8 +164,8 @@ func GetUserDetails(contx echo.Context) error {
 
 	// Strip "Bearer " from the header
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	
-	userDetails, err := services.AppService.GetUserDetails(tokenString)
+
+	userDetails, err := ctrl.Svc.GetUserDetails(tokenString)
 	if err != nil {
 		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
 			Success: false,

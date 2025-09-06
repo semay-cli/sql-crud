@@ -1,0 +1,57 @@
+package crons
+
+import (
+    {{- range .AppNames}}
+	{{ . | replaceString }}_sch "{{$.ProjectName}}/{{ . }}/scheduler"
+	{{ . | replaceString }}_repo "{{$.ProjectName}}/{{ . }}/repository"
+	{{- end }}
+	"{{ .ProjectName }}/configs"
+
+	"github.com/robfig/cron/v3"
+)
+
+type ScheduledService struct {
+	Cron                  *cron.Cron
+	Cfg                   *configs.EnvConfig
+    {{- range .AppNames}}
+	{{ . | toPascalCase }}Repository      *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository
+
+	{{- end }}
+}
+
+func NewScheduledService(cron *cron.Cron, cfg *configs.EnvConfig,
+    {{- range .AppNames}}
+{{ . | getFirstLetters }} *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository,
+
+{{- end }}
+) *ScheduledService {
+	return &ScheduledService{
+		Cron:                  cron,
+		Cfg:                   cfg,
+    {{- range .AppNames}}
+		{{ . | toPascalCase }}Repository :      {{ . | getFirstLetters }},
+    {{- end }}
+	}
+}
+
+func (s *ScheduledService) Start() {
+
+	{{- range .AppNames}}
+	// Schedule {{ . | toPascalCase }}Tasks to run every minute
+	_, err := s.Cron.AddFunc("@every 720m", s.{{ . | toPascalCase }}Tasks)
+	if err != nil {
+		panic("Failed to schedule {{ . | toPascalCase }}Tasks: " + err.Error())
+	}
+    {{- end }}
+
+
+
+	// Start the cron scheduler
+	s.Cron.Start()
+}
+
+{{- range .AppNames}}
+func (s *ScheduledService) {{ . | toPascalCase }}Tasks() {
+	{{ . | replaceString }}_sch.{{ . | toPascalCase }}LogClear()
+}
+{{- end }}
