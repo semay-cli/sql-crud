@@ -94,10 +94,10 @@ func (s *{{ .AppName | toPascalCase }}Repository) GetOne{{.Name}}(ctx context.Co
 		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return nil, fmt.Errorf("no users found")
+		return nil, fmt.Errorf("no {{.LowerName}}s found")
 	}
 
-    // Setting Cache before returning the user
+    // Setting Cache before returning the {{.LowerName}}s
     s.Cache.Set(cacheKey, &{{.LowerName}})
 
 	return &{{.LowerName}}, nil
@@ -150,8 +150,9 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Cont
 	if result.Error != nil {
 		return nil, 0, result.Error
 	}
+
 	if result.RowsAffected == 0 {
-		return nil, 0, fmt.Errorf("no users found")
+		return nil, 0, nil
 	}
 
 
