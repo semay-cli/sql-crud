@@ -211,6 +211,7 @@ func buildContainer() *dig.Container {
 
 
 	{{ range .AppNames}}
+
 	// Provide {{ . | replaceString }} repository
 	mustProvide(container.Provide(func(in struct {
 		dig.In
@@ -224,12 +225,13 @@ func buildContainer() *dig.Container {
 	{{- end }}
 
 	{{ range .AppNames}}
+
 	// Provide controllers
 	mustProvide(container.Provide(func(in struct {
 		dig.In
 		Svc *{{ . | replaceString }}_svc.{{ . | toPascalCase }}Repository `name:"{{ . | replaceString }}_repo"`
 	}) *{{ . | replaceString }}_ctrl.{{ . | toPascalCase }}Controller {
-		return blue_admin_ctrl.New{{ . | toPascalCase }}Controller(in.Svc)
+		return {{ . | replaceString }}_ctrl.New{{ . | toPascalCase }}Controller(in.Svc)
 	}, dig.Name("{{ . | replaceString }}_controller")))
 	{{- end }}
 

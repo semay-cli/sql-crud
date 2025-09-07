@@ -45,8 +45,8 @@ var (
 				// Get current working directory
 				currentDir, _ := os.Getwd()
 				generate.GenerateMainAndManager(stemplates.RenderData)
+
 				generate.GenerateConfig(stemplates.RenderData)
-				generate.GenerateCrons(stemplates.RenderData)
 
 				// Handle appName if provided
 				if appName != "" {
@@ -181,6 +181,12 @@ func handleProjectType(projectType, frame string, cmd *cobra.Command) {
 			generate.GenerateAPIClientJS(stemplates.RenderData)
 			generate.GenerateFormSchemaZOD(stemplates.RenderData)
 		}
+	case "cron":
+		stemplates.InitProjectJSON()
+		stemplates.RenderData.ProjectName = stemplates.ProjectSettings.ProjectName
+		stemplates.RenderData.AppNames = stemplates.ProjectSettings.AppNames
+		generate.GenerateCrons(stemplates.RenderData)
+
 	default:
 		fmt.Println(frame)
 		// fmt.Printf("Args: %#v\n", args)

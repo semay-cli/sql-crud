@@ -25,6 +25,12 @@ type {{.Name}} struct {
     UpdatedAt time.Time {{.BackTick}}bson:"updated_at,omitempty"{{.BackTick}}
 }
 
+{{ if .TableName }}
+func (m *{{.Name}}) TableName() string {
+    return "{{.TableName}}"
+}
+{{- end }}
+
 func (m *{{.Name}}) To{{.Name}}Get() *{{.Name}}Get {
     return &{{.Name}}Get{
         {{- range .Fields}}

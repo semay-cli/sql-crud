@@ -15,7 +15,6 @@ type ScheduledService struct {
 	Cfg                   *configs.EnvConfig
     {{- range .AppNames}}
 	{{ . | toPascalCase }}Repository      *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository
-
 	{{- end }}
 }
 
