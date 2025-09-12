@@ -17,9 +17,10 @@ import (
 )
 
 // {{.Name}} Database model info
-// @Description App type information
+// @Description {{.Name}} type information
 type {{.Name}} struct {
-    {{- range .Fields}} {{.Name}} {{.Type}}  {{.BackTick}}{{.Annotation}}{{.BackTick}}
+    {{- range .Fields}} {{if .ForeignKeyModel }} {{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
+     {{ .ForeignKeyModel }} *{{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else }}  {{.Name}} {{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}}
 	{{end}}
 	CreatedAt time.Time {{.BackTick}}bson:"created_at,omitempty"{{.BackTick}}
     UpdatedAt time.Time {{.BackTick}}bson:"updated_at,omitempty"{{.BackTick}}
@@ -59,13 +60,15 @@ func (m *{{.Name}}) To{{.Name}}Get() *{{.Name}}Get {
 // {{.Name}}Post model info
 // @Description {{.Name}}Post type information
 type {{.Name}}Post struct {
-  	{{- range .Fields}}{{- if .Post}} {{.Name}} {{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}{{- end}}
+  	{{- range .Fields}}{{- if .Post}} {{if .ForeignKeyModel }} {{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
+     {{ .ForeignKeyModel }} *{{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else }}  {{.Name}} {{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}}{{- end}}
 {{end}}}
 
 // {{.Name}}Get model info
 // @Description {{.Name}}Get type information
 type {{.Name}}Get struct {
-	{{- range .Fields}} {{- if .Get}}	{{.Name}} {{.Type}}  {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}}
+	{{- range .Fields}} {{- if .Get}}{{if .ForeignKeyModel }} {{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
+     {{ .ForeignKeyModel }} *{{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else }}  {{.Name}} {{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}} {{- end}}
 	{{end}}
 	CreatedAt time.Time {{.BackTick}}bson:"created_at,omitempty"{{.BackTick}}
 	UpdatedAt time.Time {{.BackTick}}bson:"updated_at,omitempty"{{.BackTick}}

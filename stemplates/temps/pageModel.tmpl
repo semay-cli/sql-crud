@@ -1,13 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Eye, Edit, Trash2, Plus, Building2, Mail, BadgeDollarSign } from "lucide-react";
+import { Eye, Edit, Trash2, Plus, Building2, Mail, BadgeDollarSign, X, } from "lucide-react";
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import GenericStyledFilterCard from "@/components/common/GenricFilterCard";
@@ -16,10 +13,10 @@ import { toast } from "sonner";
 import { {{.LowerName}}Service } from "@/api/{{.LowerName}}Service"
 import GenericPagination from "@/components/common/GenericPagination";
 import {{.Name}}Form from "./{{.Name}}Form";
-import { set } from "date-fns";
+
 
 interface {{.Name}}Data {
-  {{- range .Fields}} {{.LowerName}}: {{.Type | toLowerCaseName}}, {{- end}}
+  {{- range .Fields}} {{.Name | toSnakeCase  }}: {{.Type | toLowerCaseName}}, {{- end}}
 }
 
 interface {{.Name}}Response {
@@ -30,7 +27,7 @@ interface {{.Name}}Response {
 
 
 const initialFormData: Omit<{{.Name}}Data, 'id'> = {
-  {{- range .Fields}} {{.LowerName}}: "", {{- end}}
+  {{- range .Fields}} {{.Name | toSnakeCase }}: "", {{- end}}
 };
 
 export default function {{.Name}}Page() {
@@ -88,6 +85,7 @@ export default function {{.Name}}Page() {
       return;
     }
     update{{.Name}}Mutation.mutate({ {{.LowerName}}Id: itemId, {{.LowerName}}Data: JSON.parse(JSON.stringify(formData)) });
+    setActiveTab("list");
   };
 
   const add{{.Name}}Mutation = useMutation({
@@ -157,7 +155,7 @@ export default function {{.Name}}Page() {
 
   const filterOptions: FilterOption[] = [
   {{- range .SearchFields}}
-    { field: "{{ . }}", label: "{{ . }}", type: "text" },
+    { field: "{{ . }}", label: "{{ . | snakeToWord }}", type: "text" },
       {{- end}}
 
   ]
@@ -274,7 +272,7 @@ export default function {{.Name}}Page() {
                   {  {{.LowerName}}s?.map((item) => (
                     <TableRow key={item?.id}>
                       {{- range .Fields}}
-                        <TableCell>{item?.{{.LowerName}}}</TableCell>
+                        <TableCell>{item?.{{.Name | toSnakeCase }}}</TableCell>
                       {{- end}}
                       <TableCell>
                         <div className="flex gap-2">
@@ -337,7 +335,7 @@ export default function {{.Name}}Page() {
         {{- range .Fields}}
          <div>
             <span className="text-muted-foreground font-medium">{{.Name}}:</span><br />
-            {selectedItem?.{{.LowerName}} || "N/A"}
+            {selectedItem?.{{.Name | toSnakeCase }} || "N/A"}
           </div>
          {{- end}}
 
@@ -364,6 +362,15 @@ export default function {{.Name}}Page() {
               <CardTitle>{isEditing ? 'Update {{.Name}} ' : 'Add New {{.Name}} '}</CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="col-span-2 mt-4 flex gap-2 justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setActiveTab("list")}
+                >
+                  <X className="h-6 w-6 m-2" />
+                </Button>
+              </div>
               { isEditing ?
                   <{{.Name}}Form initialData={formData} isEditing={isEditing} onSubmit={handleUpdate}  /> :
                   <{{.Name}}Form initialData={formData} isEditing={isEditing} onSubmit={handleAdd{{.Name}}}  />

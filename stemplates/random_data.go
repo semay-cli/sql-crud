@@ -150,6 +150,42 @@ func ToPascalCase(input string) string {
 	return strings.Join(parts, "")
 }
 
+// PascalToSnake converts a PascalCase string to snake_case
+func PascalToSnake(input string) string {
+	// Insert an underscore before all capital letters (except the first)
+	re := regexp.MustCompile("([A-Z][a-z0-9]*)")
+	matches := re.FindAllStringSubmatch(input, -1)
+
+	var words []string
+	for _, match := range matches {
+		words = append(words, strings.ToLower(match[0]))
+	}
+
+	return strings.Join(words, "_")
+}
+
+// PascalToWords converts PascalCase or camelCase to "Word Word" format
+func PascalToWords(input string) string {
+	// Add a space before all capital letters (except the first one)
+	re := regexp.MustCompile(`([a-z])([A-Z])`)
+	spaced := re.ReplaceAllString(input, `$1 $2`)
+
+	// Optional: capitalize first letter (if input is camelCase)
+	return strings.TrimSpace(spaced)
+}
+
+// SnakeToWords converts "something_new" → "Something New"
+func SnakeToWords(input string) string {
+	words := strings.Split(input, "_")
+	for i, word := range words {
+		if len(word) > 0 {
+			// Capitalize first letter
+			words[i] = strings.ToUpper(word[:1]) + word[1:]
+		}
+	}
+	return strings.Join(words, " ")
+}
+
 // Function to extract the first letter of each word
 func getFirstLetters(input string) string {
 	// Split the string by hyphen and iterate over the parts
@@ -189,6 +225,9 @@ var FuncMap = template.FuncMap{
 	"formatSliceToString":     formatSliceToString,     // Register format slice to string functionD
 	"toLowerCaseName":         ToLowerCaseName,         // Register format slice to string functionD
 	"toPascalCase":            ToPascalCase,            // Register toPascalCase function
+	"toSnakeCase":             PascalToSnake,           // Register PascalToSnake function
+	"pascalToWords":           PascalToWords,           // Register PascalToWords function
+	"snakeToWord":             SnakeToWords,            // Register SnakeToWords function
 	"capitalize":              capitalize,              // Register capitalize function
 	"getFirstLetters":         getFirstLetters,         // Register getFirstLetters function
 }

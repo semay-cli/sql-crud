@@ -1,15 +1,65 @@
 import { z } from "zod";
 
+const numberField = z
+  .union([z.string(), z.number()])
+  .transform((val) => {
+    if (typeof val === "string") {
+      return val === "" ? undefined : Number(val);
+    }
+    return val; // already a number
+  })
+  .refine((val) => val === undefined || !isNaN(val), {
+    message: "Must be a valid number",
+  });
+
+const dateField = z
+  .union([z.string(), z.date()])
+  .transform((val) => {
+    if (val instanceof Date) return val;
+    const parsed = new Date(val);
+    return isNaN(parsed.getTime()) ? undefined : parsed;
+  })
+  .refine((val) => val instanceof Date && !isNaN(val.getTime()), {
+    message: "Invalid date",
+  });
+
+const timeField=z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+  message: "Invalid time format (HH:mm)",
+});
 
 export const {{.LowerName}}PostSchema = z.object({
-    {{- range .Fields}}{{- if .Post}} {{.LowerName}}: z.string(), {{- end}}
+    {{- range .Fields}} {{- if .Post}}
+        {{- if or (eq .Type "uint")  (eq .Type "int") (eq .Type "float64") (eq .Type "uint") }}
+            {{.Name | toSnakeCase }}: numberField,
+        {{- else if eq .Type "time.Time" }}
+            {{.Name | toSnakeCase }}: dateField,
+        {{- else if eq .Type "string" }}
+            {{.Name | toSnakeCase }}: z.string(),
+        {{- else if eq .Type "bool" }}
+            {{.Name | toSnakeCase }}: z.boolean(),
+        {{- else}}
+            {{.Name | toSnakeCase }}: z.string(),
+        {{- end}}
+    {{- end}}
 {{end}}});
 
 export type {{.Name}}FormPostValues = z.infer<typeof {{.LowerName}}PostSchema>;
 
 
 export const {{.LowerName}}PatchSchema = z.object({
-    {{- range .Fields}}{{- if .Patch}} {{.LowerName}}: z.string(), {{- end}}
+    {{- range .Fields}}{{- if .Patch}}
+        {{- if or (eq .Type "uint")  (eq .Type "int") (eq .Type "float64") (eq .Type "uint") }}
+            {{.Name | toSnakeCase }}: numberField,
+        {{- else if eq .Type "time.Time" }}
+            {{.Name | toSnakeCase }}: dateField,
+        {{- else if eq .Type "string" }}
+            {{.Name | toSnakeCase }}: z.string(),
+        {{- else if eq .Type "bool" }}
+            {{.Name | toSnakeCase }}: z.boolean(),
+        {{- else}}
+            {{.Name | toSnakeCase }}: z.string(),
+        {{- end}}
+     {{- end}}
 {{end}}});
 
 

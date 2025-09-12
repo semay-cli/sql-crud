@@ -3,6 +3,7 @@ package models
 import (
 	"fmt"
 	"log"
+	"strings"
 	{{- if eq .AuthAppName  .AppName }}
 	"time"
 	{{- end }}
@@ -23,6 +24,14 @@ func InitDatabase(test_flag bool, cfg *configs.EnvConfig) {
 		panic(err)
 	}
 	fmt.Println("Connection Opened to Database")
+
+	// ✅ Enable foreign keys (only needed for SQLite)
+	if cfg.Get(fmt.Sprintf("%v_DB_TYPE",strings.ToUpper("{{ .AppName | replaceString }}"))) == "sqlite" {
+		if err := db.Exec("PRAGMA foreign_keys = ON;").Error; err != nil {
+			log.Fatalf("Failed to enable foreign keys: %v", err)
+		}
+		fmt.Println("Foreign keys enabled for SQLite")
+	}
 
 	if err := db.AutoMigrate(
 		{{- range .Models}}

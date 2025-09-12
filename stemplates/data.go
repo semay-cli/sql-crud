@@ -118,6 +118,7 @@ type Relationship struct {
 // Field represents a model field.
 type Field struct {
 	NormalModelName  string `json:"normal_model_name"`
+	ForeignKeyModel  string `json:"foreign_key_model"`
 	ModelName        string `json:"model_name"`
 	Name             string `json:"name"`
 	LowerName        string `json:"lower_name"`

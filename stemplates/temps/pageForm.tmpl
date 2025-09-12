@@ -1,5 +1,14 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { {{.LowerName}}PostSchema, {{.Name}}FormPostValues } from "@/schemas/{{.LowerName}}Schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,44 +22,224 @@ type Props = {
 };
 
 export default function {{.Name}}Form({ initialData, onSubmit, isEditing }: Props) {
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<{{.Name}}FormPostValues>({
+  const form = useForm<{{.Name}}FormPostValues>({
     resolver: zodResolver({{.LowerName}}PostSchema),
     defaultValues: initialData || {
-     {{- range .Fields}} {{.LowerName}}: "", {{- end}}
+     {{- range .Fields}} {{.Name | toSnakeCase }}: "", {{- end}}
     },
   });
 
   // Reset form when initialData changes (e.g. when editing a different customer)
   useEffect(() => {
     if (initialData) {
-      reset(initialData);
+      form.reset(initialData);
     }
-  }, [initialData, reset]);
+  }, [initialData, form]);
 
 
+function onSubmitHandler(data: {{.Name}}FormPostValues) {
+    onSubmit(data);
+    if (!isEditing) {
+      form.reset();
+    }
+  }
+
+const formFields: {
+    name: keyof BillOfLadingFormPostValues;
+    label: string;
+    type: "text" | "date" | "datetime-local" | "time" | "select" | "number";
+    options?: { label: string; value: string | number }[]; // for select
+    valueType?: "string" | "number"; // for type casting
+    readonly?: boolean;
+  }[]=[
+    {{- range .Fields}}
+          { name: "{{.Name | toSnakeCase }}", label: "{{.Name | snakeToWord}}" },
+        {{- end}}
+  ]
+
+
+  function renderFormField(fieldConfig: (typeof formFields)[number]) {
+    return (
+      <FormField
+        key={fieldConfig.name}
+        control={form.control}
+        name={fieldConfig.name}
+        render={({ field: formField }) => {
+          const value =
+            fieldConfig.type === "number"
+              ? formField.value ?? ""
+              : (fieldConfig.type === "date" ||
+                  fieldConfig.type === "datetime-local") &&
+                formField.value instanceof Date
+              ? fieldConfig.type === "date"
+                ? formField.value.toISOString().slice(0, 10)
+                : formField.value.toISOString().slice(0, 16)
+              : formField.value instanceof Date
+              ? formField.value.toISOString()
+              : formField.value || "";
+
+          const onChange = (e: any) => {
+            const raw = e?.target?.value ?? e;
+            if (fieldConfig.readonly) return;
+            if (fieldConfig.valueType === "number") {
+              formField.onChange(raw === "" ? undefined : Number(raw));
+            } else {
+              formField.onChange(raw);
+            }
+          };
+
+          const commonProps = {
+            ...formField,
+            value,
+            onChange,
+          };
+
+          return (
+            <FormItem>
+              <FormLabel>{fieldConfig.label}</FormLabel>
+              <FormControl>
+                {(() => {
+                  switch (fieldConfig.type) {
+                    case "select":
+                      return (
+                        <Select
+                          disabled={fieldConfig.readonly}
+                          onValueChange={(val) => {
+                            if (fieldConfig.readonly) return;
+                            if (fieldConfig.valueType === "number") {
+                              formField.onChange(
+                                val === "" ? undefined : Number(val)
+                              );
+                            } else {
+                              formField.onChange(val);
+                            }
+                          }}
+                          value={
+                            formField.value === undefined ||
+                            formField.value === null
+                              ? ""
+                              : String(formField.value)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue
+                              placeholder={`Select ${fieldConfig.label}`}
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {fieldConfig.options?.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={String(option.value)}
+                              >
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      );
+
+                    case "date":
+                    case "datetime-local":
+                      return (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant={"outline"}
+                              className={`w-full justify-start text-left font-normal ${
+                                !formField.value ? "text-muted-foreground" : ""
+                              }`}
+                              type="button"
+                              disabled={fieldConfig.readonly}
+                            >
+                              {formField.value
+                                ? format(
+                                    new Date(formField.value),
+                                    fieldConfig.type === "date"
+                                      ? "yyyy-MM-dd"
+                                      : "yyyy-MM-dd HH:mm"
+                                  )
+                                : `Pick ${fieldConfig.label}`}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={
+                                formField.value
+                                  ? new Date(formField.value)
+                                  : undefined
+                              }
+                              onSelect={(date: Date | undefined) => {
+                                if (fieldConfig.readonly) return;
+                                if (!date) {
+                                  formField.onChange("");
+                                } else if (fieldConfig.type === "date") {
+                                  formField.onChange(
+                                    date.toISOString().slice(0, 10)
+                                  );
+                                } else {
+                                  const local = new Date(
+                                    date.getTime() -
+                                      date.getTimezoneOffset() * 60000
+                                  )
+                                    .toISOString()
+                                    .slice(0, 16);
+                                  formField.onChange(local);
+                                }
+                              }}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      );
+                    case "time":
+                      return (
+                        <Input
+                          type="time"
+                          {...commonProps}
+                          readOnly={fieldConfig.readonly}
+                          // Only allow string format like "13:45"
+                          value={
+                            typeof formField.value === "string"
+                              ? formField.value
+                              : formField.value instanceof Date
+                              ? formField.value.toISOString().slice(11, 16)
+                              : ""
+                          }
+                          onChange={(e) => {
+                            if (fieldConfig.readonly) return;
+                            const val = e.target.value;
+                            // Optionally parse to Date or just keep as string
+                            formField.onChange(val);
+                          }}
+                        />
+                      );
+
+                  }
+                })()}
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          );
+        }}
+      />
+    );
+  }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-2 gap-4">
-        {{- range .Fields}}
-            <div>
-                <Label>{{.Name}}</Label>
-                <Input {...register("{{.LowerName}}")} />
-                {errors.{{.LowerName}} && <p className="text-sm text-red-500">{errors.{{.LowerName}}.message}</p>}
-            </div>
-        {{- end}}
-      <div className="col-span-2 mt-4 flex gap-2">
-        <Button type="submit" className="bg-blue-600 text-white">
-          {isEditing ? "Update" : "Save"}
-        </Button>
-        <Button type="button" variant="outline" onClick={() => reset()}>
-          Cancel
-        </Button>
-      </div>
-    </form>
+     <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit(onSubmitHandler)}
+        className="grid grid-cols-2 gap-4"
+      >
+         {formFields.map((field) => renderFormField(field))}
+
+        <div className="col-span-2 mt-4 flex gap-2 justify-end">
+          <Button type="submit" className="bg-blue-600 text-white">
+            {isEditing ? "Update" : "Save"}
+          </Button>
+        </div>
+      </form>
+    </Form>
   );
 }
