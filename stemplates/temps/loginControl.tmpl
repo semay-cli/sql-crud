@@ -71,7 +71,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Con
 			Data:    nil,
 		})
 	}
-    repo := ctrl.Svc
+    repo := ctrl.Svc.Repo
 	switch login_request.GrantType {
 	case "authorization_code":
 		token, err := repo.Login(login_request.Email, login_request.Password)

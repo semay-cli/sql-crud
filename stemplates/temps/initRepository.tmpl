@@ -1,0 +1,28 @@
+package repository
+
+import (
+	"{{ .ProjectName }}/cache"
+	"{{ .ProjectName }}/configs"
+	"gorm.io/gorm"
+)
+
+
+
+// AppDatabase Service wraps Dababase service(SQL)
+type {{ .AppName | toPascalCase }}Repository struct {
+	DB *gorm.DB
+	Cache *cache.CacheService
+	Cfg   *configs.EnvConfig
+}
+
+
+
+func InitRepository(client *gorm.DB, cacheService *cache.CacheService, cfg *configs.EnvConfig) *{{ .AppName | toPascalCase }}Repository {
+
+	return &{{ .AppName | toPascalCase }}Repository{
+		DB:    client,
+		Cache: cacheService,
+		Cfg:   cfg,
+	}
+
+}

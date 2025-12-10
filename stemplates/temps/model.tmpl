@@ -32,7 +32,7 @@ func (m *{{.Name}}) TableName() string {
 }
 {{- end }}
 
-func (m *{{.Name}}) To{{.Name}}Get() *{{.Name}}Get {
+func (m *{{.Name}}) ToGet() *{{.Name}}Get {
     return &{{.Name}}Get{
         {{- range .Fields}}
         {{if .Get}}{{.Name}}: m.{{.Name}},{{- end}}
