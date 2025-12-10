@@ -1,0 +1,72 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"{{ .ProjectName }}/{{ .AppName }}/models"
+	 "gorm.io/gorm"
+)
+
+
+
+
+// ##########################################################
+// ##########  Relationship  Services to {{.FieldName}}
+// ##########################################################
+
+func (s *{{ .AppName | toPascalCase }}Service) Add{{.ParentName}}To{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string) error {
+
+	err := s.withTransaction(ctx, func(tx *gorm.DB) error {
+		if err := s.Repo.Add{{.ParentName}}To{{.FieldName}}(ctx,{{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID,tx); err != nil {
+			return fmt.Errorf("failed to associate add relation: %v", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *{{ .AppName | toPascalCase }}Service) Remove{{ .ParentName}}From{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string) error {
+
+	err := s.withTransaction(ctx, func(tx *gorm.DB) error {
+		if err := s.Repo.Remove{{.ParentName}}From{{.FieldName}}(ctx,{{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID,tx); err != nil {
+			return fmt.Errorf("failed to associate add relation: %v", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *{{ .AppName | toPascalCase }}Service) Get{{.ParentName}}{{.FieldName}}s(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, pagination models.Pagination) ([]models.{{.FieldName}}Get, uint, error) {
+
+	{{.LowerFieldName}}s, total, err := s.Repo.Get{{.ParentName}}{{.FieldName}}s(ctx, {{.ParentName | toLowerCaseName}}ID, pagination)
+    if err != nil {
+        return nil, 0, fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
+    }
+	return {{.LowerFieldName}}s, uint(total), nil
+}
+// #########################
+// No Pagination Services###
+// #########################
+
+func (s *{{ .AppName | toPascalCase }}Service) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string) ([]models.{{.FieldName}}Get, error) {
+
+	{{.LowerFieldName}}s,err := s.Repo.GetAll{{.FieldName}}sFor{{.ParentName}}(ctx, {{.ParentName | toLowerCaseName}}ID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
+    }
+	return {{.LowerFieldName}}s, nil
+}
+
+func (s *{{ .AppName | toPascalCase }}Service) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string) ([]models.{{.FieldName}}Get, error) {
+	{{.LowerFieldName}}s,err := s.Repo.GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx, {{.ParentName | toLowerCaseName}}ID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
+    }
+	return {{.LowerFieldName}}s, nil
+}

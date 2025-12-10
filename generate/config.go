@@ -21,6 +21,7 @@ func GenerateCrons(data stemplates.Data) {
 	if err != nil {
 		panic(err)
 	}
+
 	stemplates.WriteTemplateToFile("crons/cron.go", tmpl, data)
 }
 

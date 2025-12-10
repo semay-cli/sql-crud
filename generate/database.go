@@ -18,10 +18,12 @@ func GenerateDBConn(data stemplates.ProjectSetting) {
 func GenerateCacheService(data stemplates.ProjectSetting) {
 	tmpl := stemplates.LoadTemplate("cache")
 	redisTmpl := stemplates.LoadTemplate("cacheRedis")
+	rabbitTmpl := stemplates.LoadTemplate("rabbit")
 	err := os.MkdirAll("cache", os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
 	stemplates.WriteTemplateToFileSetting("cache/cache.go", tmpl, data)
 	stemplates.WriteTemplateToFileSetting("cache/redis_cache.go", redisTmpl, data)
+	stemplates.WriteTemplateToFileSetting("cache/redis_cache.go", rabbitTmpl, data)
 }

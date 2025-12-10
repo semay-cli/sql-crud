@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"crypto/sha512"
 	"encoding/hex"
-
+	"golang.org/x/crypto/bcrypt"
 	"{{.ProjectName}}/configs"
 )
 
@@ -73,4 +73,27 @@ func GenerateRandomString(length int) (string, error) {
 	}
 
 	return string(result), nil
+}
+
+
+// HashPassword hashes a password using bcrypt
+func HashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword(
+		[]byte(password),
+		//bcrypt.DefaultCost, // cost = 10
+		4,
+	)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
+// PasswordsMatch compares a bcrypt hash with a plaintext password
+func PasswordsMatch(hashedPassword, password string) bool {
+	err := bcrypt.CompareHashAndPassword(
+		[]byte(hashedPassword),
+		[]byte(password),
+	)
+	return err == nil
 }

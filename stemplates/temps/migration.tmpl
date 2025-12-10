@@ -17,6 +17,11 @@ import (
 	"github.com/google/uuid"
 )
 
+
+func BoolPtr(b bool) *bool {
+    return &b
+}
+
 func InitDatabase(test_flag bool, cfg *configs.EnvConfig) {
 
 	db, err  := database.ReturnSession("{{ .AppName | replaceString }}",cfg)
@@ -72,7 +77,8 @@ func CreateSuperUser( cfg *configs.EnvConfig) {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	// Create the superuser
-	hashedPassword := HashFunc("default@123",cfg)
+	// hashedPassword := HashFunc("default@123",cfg)
+	hashedPassword,_ := HashPassword("default@123")
 	uuid_uuid, _ := uuid.NewV7()
 
 	user := &User{
@@ -83,7 +89,7 @@ func CreateSuperUser( cfg *configs.EnvConfig) {
 		Username:      "superuser",
 		Password:      hashedPassword,
 		DateRegistred: time.Now(),
-		Disabled:      false,
+		Disabled:      BoolPtr(false),
 		UUID:          uuid_uuid.String(),
 		CreatedAt:     time.Now(),
 	}
@@ -111,8 +117,11 @@ func ResourceMigration( cfg *configs.EnvConfig) {
 		{
 			Name: "{{.AppName }}",
 			UUID: uuid_uuid.String(),
+			RedirectURL: "/admin/login",
+			RedirectON: BoolPtr(false),
+			SwaggerURL: "{{.AuthAppName | replaceString }}",
 			Description: "{{.AppName }} Description",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 	}
 
@@ -120,7 +129,7 @@ func ResourceMigration( cfg *configs.EnvConfig) {
 		{
 			Name: "{{ .AppName | toLowerCaseName }}-superadmin",
 			Description: "{{ .AppName | toLowerCaseName }} superuser role",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 	}
 
@@ -129,22 +138,22 @@ func ResourceMigration( cfg *configs.EnvConfig) {
 		{
 			Name: "{{$.AppName}}-{{.LowerName}}:read",
 			Description: "{{.AppName }} Read {{.LowerName}}",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 		{
 			Name: "{{$.AppName}}-{{.LowerName}}:create",
 			Description: "{{.AppName }} Create {{.LowerName}}",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 		{
 			Name: "{{$.AppName}}-{{.LowerName}}:update",
 			Description: "{{.AppName }} Update {{.LowerName}}",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 		{
 			Name: "{{$.AppName}}-{{.LowerName}}:delete",
 			Description: "{{.AppName }} Delete {{.LowerName}}",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 		{{- end}}
 	}
@@ -269,7 +278,7 @@ func ResourceMigration(cfg *configs.EnvConfig) {
 			Name: "{{.AppName }}",
 			UUID: uuid_uuid.String(),
 			Description: "{{.AppName }} Description",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 	}
 
@@ -277,7 +286,7 @@ func ResourceMigration(cfg *configs.EnvConfig) {
 		{
 			Name: "{{ .AppName | toLowerCaseName }}-superadmin",
 			Description: "{{ .AppName | toLowerCaseName }} superuser role",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 	}
 
@@ -286,22 +295,22 @@ func ResourceMigration(cfg *configs.EnvConfig) {
 		{
 			Name: "{{$.AppName}}-{{.LowerName}}:read",
 			Description: "{{.AppName }} Read {{.LowerName}}",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 		{
 			Name: "{{$.AppName}}-{{.LowerName}}:create",
 			Description: "{{.AppName }} Create {{.LowerName}}",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 		{
 			Name: "{{$.AppName}}-{{.LowerName}}:update",
 			Description: "{{.AppName }} Update {{.LowerName}}",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 		{
 			Name: "{{$.AppName}}-{{.LowerName}}:delete",
 			Description: "{{.AppName }} Delete {{.LowerName}}",
-			Active: true,
+			Active: BoolPtr(true),
 		},
 		{{- end}}
 	}

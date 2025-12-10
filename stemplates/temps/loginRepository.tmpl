@@ -1,0 +1,109 @@
+package repository
+
+import (
+	"fmt"
+
+	"{{.ProjectName}}/{{ .CurrentAppName}}/models"
+	)
+
+func (s *{{ .CurrentAppName | toPascalCase }}Repository) Login(email, password string) (string, error) {
+        var user *models.User
+        cacheKey := "user:login:" + email
+
+        // 1. Try cache first
+        if cached, found := s.Cache.Get(cacheKey); found {
+            user = cached.(*models.User)
+        } else {
+            // 2. Fetch from DB if not in cache
+            u := &models.User{}
+            if err := s.DB.Where("email = ? AND disabled = ?", email, false).
+                Preload("Groups").
+                Preload("Scopes").
+                First(u).Error; err != nil {
+                return "", fmt.Errorf("user not found: %w", err)
+            }
+            user = u
+
+            // 3. Cache user without password
+            safeUser := *user
+            // remove sensitive info
+            s.Cache.Set(cacheKey, &safeUser)
+        }
+
+        // 4. Always verify password
+        if !s.PasswordsMatch(user.Password, password) {
+            return "", fmt.Errorf("invalid credentials")
+        }
+
+        // 5. Build permissions & groups
+        permissions := make([]string, len(user.Scopes))
+        for i, v := range user.Scopes {
+            permissions[i] = v.Name
+        }
+        groups := make([]string, len(user.Groups))
+        for i, v := range user.Groups {
+            groups[i] = v.Name
+        }
+
+        // 6. Create JWT token
+        token, err := s.CreateJWTToken(*user, permissions, groups, 60)
+        if err != nil {
+            return "", fmt.Errorf("error creating token: %w", err)
+        }
+
+        return token, nil
+   }
+
+
+func (s *{{ .CurrentAppName | toPascalCase }}Repository) DecodeToken(tokenString string) (UserClaim, error) {
+	claims, err := s.ParseJWTToken(tokenString)
+	if err != nil {
+		return UserClaim{}, fmt.Errorf("error parsing token: %w", err)
+	}
+	return claims, nil
+}
+
+func (s *{{ .CurrentAppName | toPascalCase }}Repository) RefreshToken(tokenString string) (string, error) {
+	claims, err := s.DecodeToken(tokenString)
+	if err != nil {
+		return "", err
+	}
+
+	// Here you can add logic to check if the token is close to expiration
+	// and refresh it accordingly. For now, we will just create a new token.
+	newToken, err := s.CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 60)
+	if err != nil {
+		return "", fmt.Errorf("error refreshing token: %w", err)
+	}
+
+	return newToken, nil
+}
+
+
+func (s *{{ .CurrentAppName | toPascalCase }}Repository) GetUserDetails(tokenString string) (map[string]any, error) {
+	// Step 1: Decode the token to get claims
+	claims, err := s.DecodeToken(tokenString)
+	if err != nil {
+		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+
+	// Step 2: Fetch the user from the database
+	var user models.User
+	if err := s.DB.First(&user, claims.UserID).Error; err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	// Step 3: Structure the response
+	userDetails := map[string]any{
+		"user": map[string]any{
+			"id":    user.ID,
+			"name":  user.Username,
+			"email": user.Email,
+			// Add more user fields if needed
+		},
+		"groups": claims.Groups,
+		"scopes": claims.Scopes,
+	}
+
+	return userDetails, nil
+}

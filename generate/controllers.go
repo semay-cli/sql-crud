@@ -33,7 +33,12 @@ func GenerateControllerInit(data stemplates.Data) {
 	if err := os.MkdirAll("controllers", os.ModePerm); err != nil {
 		panic("could not create directory")
 	}
-
+	tmplConcurent := stemplates.LoadTemplate("concurrency")
+	err := os.MkdirAll("concurrency", os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+	stemplates.WriteTemplateToFile("concurrency/executor.go", tmplConcurent, data)
 	stemplates.WriteTemplateToFile("controllers/init.go", inittmpl, data)
 
 }

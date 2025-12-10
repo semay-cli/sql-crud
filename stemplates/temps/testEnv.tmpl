@@ -14,11 +14,17 @@ RPC_PORT=6500
 
 ###################################################
 #Observability settings
-###################################################
 TRACE_EXPORTER=jaeger
 TRACER_HOST=localhost
 TRACER_PORT=4317
 TRACER_SAMPLE="0.1"
+###################################################
+
+###################################################
+#Observability settings
+###################################################
+RABBITMQ_MAX_CHANNELS=20
+RABBITMQ_SEMAPHORE_LIMIT=1000
 
 ###################################################
 # Local Cache Settings for Ristoretto

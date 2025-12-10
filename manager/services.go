@@ -36,7 +36,10 @@ func runServiceCommand(cmd *cobra.Command, args []string) {
 	}
 
 	stemplates.RenderData.AppName = appName
+	stemplates.RenderData.AuthAppName = stemplates.ProjectSettings.AuthAppName
+	stemplates.RenderData.AppName = appName
 	stemplates.ProjectSettings.CurrentAppName = appName
+	//stemplates.ProjectSettings.AuthAppName = appName
 
 	generate.GenerateUtilsApp(stemplates.ProjectSettings)
 	generate.GenerateServicesInit(stemplates.RenderData)

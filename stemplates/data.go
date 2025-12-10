@@ -102,6 +102,7 @@ type Model struct {
 type Relationship struct {
 	TableName       string  `json:"table_name"`
 	AppName         string  `json:"app_name"`
+	AuthAppName     string  `json:"auth_app_name"`
 	ParentName      string  `json:"parent_name"`
 	LowerParentName string  `json:"lower_parent_name"`
 	FieldName       string  `json:"field_name"`

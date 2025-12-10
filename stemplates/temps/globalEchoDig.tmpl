@@ -9,7 +9,8 @@ import (
 
 	{{- range .AppNames}}
 	{{ . | replaceString }}"{{$.ProjectName}}/{{ . }}"
-	{{ . | replaceString }}_svc "{{$.ProjectName}}/{{ . }}/repository"
+	{{ . | replaceString }}_repo "{{$.ProjectName}}/{{ . }}/repository"
+	{{ . | replaceString }}_svc "{{$.ProjectName}}/{{ . }}/services"
 	{{ . | replaceString }}_ctrl "{{$.ProjectName}}/{{ . }}/controllers"
 	{{- end }}
 
@@ -102,7 +103,7 @@ func NewEchoApp(cfg *configs.EnvConfig, appTracer oteltrace.Tracer, prom *promet
 
 		{{- if eq .AuthAppType  "sso" }}
 	// Serve static files from the "dist/django_admin_ui" folder
-	app.Static("/", "./dist/sso_admin_ui")
+	app.Static("/adm/", "./dist/sso_admin_ui")
 
 	// Handle "/admin/*" route and send the "index.html" file
 	app.GET("/admin/*", func(c echo.Context) error {
@@ -218,18 +219,34 @@ func buildContainer() *dig.Container {
 		DB    *gorm.DB `name:"{{ . | replaceString }}_db"`
 		Cache *cache.CacheService
 		Cfg   *configs.EnvConfig
-	}) *{{ . | replaceString }}_svc.{{ . | toPascalCase }}Repository  {
-		return {{ . | replaceString }}_svc.InitRepository(in.DB, in.Cache, in.Cfg)
+	}) *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository  {
+		return {{ . | replaceString }}_repo.InitRepository(in.DB, in.Cache, in.Cfg)
 	}, dig.Name("{{ . | replaceString }}_repo")))
 
 	{{- end }}
+
+
+	{{ range .AppNames}}
+
+    	// Provide {{ . | replaceString }} service
+    	mustProvide(container.Provide(func(in struct {
+    		dig.In
+    		DB    *gorm.DB `name:"{{ . | replaceString }}_db"`
+    		Cache *cache.CacheService
+    		Cfg   *configs.EnvConfig
+    		Repo  *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository        `name:"{{ . | replaceString }}_repo"`
+    	}) *{{ . | replaceString }}_svc.{{ . | toPascalCase }}Service  {
+    		return {{ . | replaceString }}_svc.InitService(in.DB, in.Cache, in.Cfg,in.Repo)
+    	}, dig.Name("{{ . | replaceString }}_svc")))
+
+    	{{- end }}
 
 	{{ range .AppNames}}
 
 	// Provide controllers
 	mustProvide(container.Provide(func(in struct {
 		dig.In
-		Svc *{{ . | replaceString }}_svc.{{ . | toPascalCase }}Repository `name:"{{ . | replaceString }}_repo"`
+		Svc *{{ . | replaceString }}_svc.{{ . | toPascalCase }}Service `name:"{{ . | replaceString }}_svc"`
 	}) *{{ . | replaceString }}_ctrl.{{ . | toPascalCase }}Controller {
 		return {{ . | replaceString }}_ctrl.New{{ . | toPascalCase }}Controller(in.Svc)
 	}, dig.Name("{{ . | replaceString }}_controller")))
@@ -241,7 +258,7 @@ func buildContainer() *dig.Container {
 		Crn   *cron.Cron
 		Cfg   *configs.EnvConfig
 	{{- range .AppNames}}
-		{{ . | toPascalCase }}Repo *{{ . | replaceString }}_svc.{{ . | toPascalCase }}Repository           `name:"{{ . | replaceString }}_repo"`
+		{{ . | toPascalCase }}Repo *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository           `name:"{{ . | replaceString }}_repo"`
 	{{- end }}
 	}) *crons.ScheduledService {
 		return crons.NewScheduledService(in.Crn, in.Cfg,

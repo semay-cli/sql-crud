@@ -7,7 +7,7 @@ import (
 
 	"{{ .ProjectName }}/{{ .AppName }}/models"
 	 "gorm.io/gorm"
-	//"github.com/jinzhu/copier"
+
 )
 
 
@@ -17,7 +17,7 @@ import (
 // ##########  Relationship  Services to {{.FieldName}}
 // ##########################################################
 
-func (s *{{ .AppName | toPascalCase }}Repository) Add{{.ParentName}}To{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string) error {
+func (s *{{ .AppName | toPascalCase }}Repository) Add{{.ParentName}}To{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string,tx *gorm.DB) error {
 	// Fetching
 	var {{.LowerParentName}} models.{{.ParentName}}
 	{{.ParentName | toLowerCaseName}}_id, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
@@ -37,33 +37,37 @@ func (s *{{ .AppName | toPascalCase }}Repository) Add{{.ParentName}}To{{.FieldNa
 	}
 
 	// Fetching
-	if res := s.DB.WithContext(ctx).First(&{{.LowerFieldName}}, {{.LowerFieldName}}_id); res.Error != nil {
+	if res := tx.First(&{{.LowerFieldName}}, {{.LowerFieldName}}_id); res.Error != nil {
 		return fmt.Errorf("{{.LowerFieldName}} not found: %v", res.Error)
 	}
 
-	err= s.withTransaction(ctx, func(tx *gorm.DB) error {
 
-		if err := tx.Model(&{{.LowerParentName}}).Association("{{.FieldName}}s").Append(&{{.LowerFieldName}}); err != nil {
-			return fmt.Errorf("failed to associate add relation: %v", err)
-		}
-		return nil
-	})
+    if err := tx.Model(&{{.LowerParentName}}).Association("{{.FieldName}}s").Append(&{{.LowerFieldName}}); err != nil {
+        return fmt.Errorf("failed to associate add relation: %v", err)
+    }
 
-	if err != nil {
-		return err
-	}
 
-	// Removing Cache if update sucess
+
+	// Removing Cache if update success
 	cacheKey_all := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
 	cacheKey_none := "{{.ParentName}}_{{.FieldName}}_none:" + {{.ParentName | toLowerCaseName}}ID
 	s.Cache.Delete(cacheKey_all)
 	s.Cache.Delete(cacheKey_none)
+	// Removing Cache if update success
+    {{- if and (eq $.AppName $.AuthAppName) (eq .ParentName "User") }}
+    email := user.Email
+    s.Cache.Delete("user:login:" + email)
+    {{- end }}
+    {{- if and (eq $.AppName $.AuthAppName) (eq .FieldName "User") }}
+    email := user.Email
+    s.Cache.Delete("user:login:" + email)
+    {{- end }}
 
 
 	return nil
 }
 
-func (s *{{ .AppName | toPascalCase }}Repository) Remove{{ .ParentName}}From{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string) error {
+func (s *{{ .AppName | toPascalCase }}Repository) Remove{{ .ParentName}}From{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string, tx *gorm.DB) error {
 	// Fetching
 	var {{.LowerParentName}} models.{{.ParentName}}
 	{{.ParentName | toLowerCaseName}}_id, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
@@ -83,26 +87,29 @@ func (s *{{ .AppName | toPascalCase }}Repository) Remove{{ .ParentName}}From{{.F
 	}
 
 	// Fetching
-	if res := s.DB.WithContext(ctx).First(&{{.LowerFieldName}}, {{.LowerFieldName}}_id); res.Error != nil {
+	if res := tx.First(&{{.LowerFieldName}}, {{.LowerFieldName}}_id); res.Error != nil {
 		return fmt.Errorf("{{.LowerFieldName}} not found: %v", res.Error.Error())
 	}
 
-	err = s.withTransaction(ctx, func(tx *gorm.DB) error {
-		if err := tx.Model(&{{.LowerParentName}}).Association("{{.FieldName}}s").Delete(&{{.LowerFieldName}}); err != nil {
-			return fmt.Errorf("failed to remove relation: %v", err)
-		}
-		return nil
-	})
 
-	if err != nil {
-		return err
-	}
+    if err := tx.Model(&{{.LowerParentName}}).Association("{{.FieldName}}s").Delete(&{{.LowerFieldName}}); err != nil {
+        return fmt.Errorf("failed to remove relation: %v", err)
+    }
+
 
 	// Removing Cache if update sucess
 	cacheKey_all := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
 	cacheKey_none := "{{.ParentName}}_{{.FieldName}}_none:" + {{.ParentName | toLowerCaseName}}ID
 	s.Cache.Delete(cacheKey_all)
 	s.Cache.Delete(cacheKey_none)
+	{{- if and (eq $.AppName $.AuthAppName) (eq .ParentName "User") }}
+    email := user.Email
+    s.Cache.Delete("user:login:" + email)
+    {{- end }}
+    {{- if and (eq .AppName .AuthAppName) (eq .FieldName "User") }}
+    email := user.Email
+    s.Cache.Delete("user:login:" + email)
+    {{- end }}
 
 
 	return nil

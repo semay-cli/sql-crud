@@ -1,0 +1,394 @@
+package message
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"strconv"
+	"sync"
+	"time"
+
+	"{{.ProjectName}}/configs"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"golang.org/x/sync/semaphore"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+)
+
+// RabbitMQService provides a reusable, reconnecting RabbitMQ abstraction.
+type RabbitMQService struct {
+	Cfg         *configs.EnvConfig
+	Conn        *amqp.Connection
+	ChannelPool chan *amqp.Channel
+	MaxChannels int
+	Sem         *semaphore.Weighted
+	Mu          sync.Mutex
+	URL         string
+}
+
+// parseInt safely parses env values to int.
+func parseInt(key string) int {
+	val, err := strconv.Atoi(key)
+	if err != nil {
+		return 8
+	}
+	return val
+}
+
+// NewRabbitMQService initializes and configures the RabbitMQ connection and channel pool.
+func NewRabbitMQService(cfg *configs.EnvConfig) (*RabbitMQService, error) {
+	url := cfg.GetOrDefault("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+	maxChannels := parseInt(cfg.GetOrDefault("RABBITMQ_MAX_CHANNELS", "10"))
+	semLimit := parseInt(cfg.GetOrDefault("RABBITMQ_SEMAPHORE_LIMIT", "50"))
+
+	conn, err := amqp.Dial(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to RabbitMQ: %w", err)
+	}
+
+	service := &RabbitMQService{
+		Cfg:         cfg,
+		Conn:        conn,
+		MaxChannels: maxChannels,
+		ChannelPool: make(chan *amqp.Channel, maxChannels),
+		Sem:         semaphore.NewWeighted(int64(semLimit)),
+		URL:         url,
+	}
+
+	// Initialize channel pool correctly
+	for i := 0; i < maxChannels; i++ {
+		ch, err := conn.Channel()
+		if err != nil {
+			return nil, fmt.Errorf("failed to open channel: %w", err)
+		}
+		service.ChannelPool <- ch
+	}
+
+	// Reconnect watcher
+	go service.reconnectOnFailure()
+
+	log.Println("✅ RabbitMQService initialized")
+	return service, nil
+}
+
+//
+// --------------------- Core Helpers ---------------------
+//
+
+// getChannel fetches a channel from the pool (or creates a new one if pool is empty).
+func (r *RabbitMQService) getChannel() *amqp.Channel {
+	select {
+	case ch := <-r.ChannelPool:
+		return ch
+	default:
+		ch, err := r.Conn.Channel()
+		if err != nil {
+			log.Printf("⚠️  failed to open channel: %v", err)
+			time.Sleep(time.Second)
+			return r.getChannel()
+		}
+		return ch
+	}
+}
+
+// releaseChannel returns a channel to the pool safely.
+func (r *RabbitMQService) releaseChannel(ch *amqp.Channel) {
+	if ch == nil {
+		return
+	}
+	select {
+	case r.ChannelPool <- ch:
+	default:
+		_ = ch.Close() // drop extra channels if pool is full
+	}
+}
+
+// reconnectOnFailure watches for connection drops and rebuilds the pool.
+func (r *RabbitMQService) reconnectOnFailure() {
+	for {
+		errChan := make(chan *amqp.Error)
+		r.Conn.NotifyClose(errChan)
+
+		err := <-errChan
+		if err != nil {
+			log.Printf("🐇 RabbitMQ connection lost: %v — reconnecting...", err)
+
+			for {
+				time.Sleep(5 * time.Second)
+				newConn, err := amqp.Dial(r.URL)
+				if err != nil {
+					log.Printf("Retrying RabbitMQ reconnect... (%v)", err)
+					continue
+				}
+
+				r.Mu.Lock()
+				r.Conn = newConn
+
+				// Rebuild pool
+				newPool := make(chan *amqp.Channel, r.MaxChannels)
+				for i := 0; i < r.MaxChannels; i++ {
+					ch, err := newConn.Channel()
+					if err != nil {
+						log.Printf("⚠️  Failed to open channel during reconnect: %v", err)
+						continue
+					}
+					newPool <- ch
+				}
+				r.ChannelPool = newPool
+				r.Mu.Unlock()
+
+				log.Println("✅ RabbitMQ reconnected successfully.")
+				break
+			}
+		}
+	}
+}
+
+// Close gracefully shuts down all resources.
+func (r *RabbitMQService) Close() {
+	log.Println("🔻 Closing RabbitMQService...")
+	close(r.ChannelPool)
+	for ch := range r.ChannelPool {
+		_ = ch.Close()
+	}
+	if !r.Conn.IsClosed() {
+		_ = r.Conn.Close()
+	}
+}
+
+//
+// --------------------- Setup & Declaration ---------------------
+//
+
+// DeclareExchange ensures an exchange exists.
+func (r *RabbitMQService) DeclareExchange(name, kind string, durable bool) error {
+	ch := r.getChannel()
+	defer r.releaseChannel(ch)
+
+	return ch.ExchangeDeclare(
+		name,
+		kind,
+		durable,
+		false, // auto-delete
+		false, // internal
+		false, // no-wait
+		nil,
+	)
+}
+
+// DeclareQueue ensures a queue exists (with optional DLQ).
+func (r *RabbitMQService) DeclareQueue(queueName string, durable bool, dlq bool) error {
+	ch := r.getChannel()
+	defer r.releaseChannel(ch)
+
+	args := amqp.Table{}
+	if dlq {
+		dlqName := queueName + ".dlq"
+		args["x-dead-letter-exchange"] = ""
+		args["x-dead-letter-routing-key"] = dlqName
+		if _, err := ch.QueueDeclare(dlqName, true, false, false, false, nil); err != nil {
+			return err
+		}
+	}
+
+	_, err := ch.QueueDeclare(
+		queueName,
+		durable,
+		false, // auto-delete
+		false, // exclusive
+		false, // no-wait
+		args,
+	)
+	return err
+}
+
+// BindQueue binds a queue to an exchange.
+func (r *RabbitMQService) BindQueue(queue, exchange, routingKey string) error {
+	ch := r.getChannel()
+	defer r.releaseChannel(ch)
+	return ch.QueueBind(queue, routingKey, exchange, false, nil)
+}
+
+//
+// --------------------- Messaging API ---------------------
+//
+
+// Publish sends a JSON message to the given exchange/routing key.
+func (r *RabbitMQService) Publish(ctx context.Context, exchange, routingKey string, data any) error {
+	if err := r.Sem.Acquire(ctx, 1); err != nil {
+		return fmt.Errorf("publish limit reached: %w", err)
+	}
+	defer r.Sem.Release(1)
+
+	body, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+
+	ch := r.getChannel()
+	defer r.releaseChannel(ch)
+
+	for attempt := 1; attempt <= 3; attempt++ {
+		err = ch.PublishWithContext(
+			ctx,
+			exchange,
+			routingKey,
+			false,
+			false,
+			amqp.Publishing{
+				ContentType: "application/json",
+				Body:        body,
+				Timestamp:   time.Now(),
+			},
+		)
+		if err == nil {
+			return nil
+		}
+		log.Printf("⚠️  Publish failed (attempt %d): %v", attempt, err)
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("failed to publish message after retries: %w", err)
+}
+
+func (r *RabbitMQService) PublishWithTracer(ctx context.Context, exchange, routingKey string, data any) error {
+	if err := r.Sem.Acquire(ctx, 1); err != nil {
+		return fmt.Errorf("publish limit reached: %w", err)
+	}
+	defer r.Sem.Release(1)
+
+	body, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+
+	ch := r.getChannel()
+	defer r.releaseChannel(ch)
+
+	// Inject trace context into a map[string]string first
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+
+	// Convert to amqp.Table
+	headers := amqp.Table{}
+	for k, v := range carrier {
+		headers[k] = v
+	}
+
+	return ch.Publish(
+		exchange,
+		routingKey,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "application/json",
+			Body:        body,
+			Timestamp:   time.Now(),
+			Headers:     headers,
+		},
+	)
+}
+
+// Consume continuously consumes messages and restarts if queue goes idle or reconnects.
+func (r *RabbitMQService) Consume(queue string, handler func(amqp.Delivery)) {
+	go func() {
+		for {
+			ch := r.getChannel()
+
+			msgs, err := ch.Consume(
+				queue,
+				"",
+				false, // manual ack
+				false, // exclusive
+				false, // noLocal
+				false, // noWait
+				nil,
+			)
+			if err != nil {
+				log.Printf("⚠️  Consume error: %v", err)
+				r.releaseChannel(ch)
+				time.Sleep(2 * time.Second)
+				continue
+			}
+
+			log.Printf("🐇 Consumer started for queue: %s", queue)
+
+			for msg := range msgs {
+				if err := r.Sem.Acquire(context.Background(), 1); err != nil {
+					log.Printf("Semaphore acquire error: %v", err)
+					continue
+				}
+
+				go func(m amqp.Delivery) {
+					defer r.Sem.Release(1)
+					defer func() {
+						if rec := recover(); rec != nil {
+							log.Printf("❌ Panic in consumer: %v", rec)
+							m.Nack(false, true)
+						}
+					}()
+
+					handler(m)
+					_ = m.Ack(false)
+				}(msg)
+			}
+
+			log.Printf("⚠️  Consumer channel closed for %s, retrying...", queue)
+			time.Sleep(2 * time.Second)
+		}
+	}()
+}
+
+func (r *RabbitMQService) ConsumeWithTracker(queue string, handler func(context.Context, amqp.Delivery)) error {
+	ch := r.getChannel()
+	defer r.releaseChannel(ch)
+
+	msgs, err := ch.Consume(
+		queue,
+		"",
+		false,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for msg := range msgs {
+			go func(m amqp.Delivery) {
+				// Convert amqp.Table headers to map[string]string
+				carrier := propagation.MapCarrier{}
+				for k, v := range m.Headers {
+					if s, ok := v.(string); ok {
+						carrier[k] = s
+					}
+				}
+
+				ctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
+				tr := otel.Tracer("rabbitmq-consumer")
+				ctx, span := tr.Start(ctx, "Consume "+queue)
+				defer span.End()
+
+				handler(ctx, m)
+			}(msg)
+		}
+	}()
+
+	return nil
+}
+
+//
+// --------------------- Utility ---------------------
+//
+
+// HealthCheck verifies the connection is alive.
+func (r *RabbitMQService) HealthCheck() error {
+	if r.Conn == nil || r.Conn.IsClosed() {
+		return errors.New("RabbitMQ connection is closed")
+	}
+	return nil
+}

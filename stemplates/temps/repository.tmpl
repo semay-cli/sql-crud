@@ -1,0 +1,233 @@
+package repository
+
+import (
+	"context"
+	"fmt"
+	"time"
+	"strconv"
+	{{- $break_3 := false }}
+	{{- range .Fields }}
+		{{- if eq .Name "UUID" }}
+			{{- $break_3 = true }}
+		{{- end }}
+	{{- end }}
+
+	{{- if $break_3 }}
+	"github.com/google/uuid"
+	{{- end }}
+
+	"{{ .ProjectName }}/{{ $.AppName }}/models"
+	 "gorm.io/gorm"
+
+)
+
+
+
+// Create inserts a new {{.LowerName}}
+func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Context, posted_{{.LowerName}} *models.{{.Name}}Post, tx *gorm.DB) (*models.{{.Name}}, error) {
+
+        {{- range .Fields}} {{- if .Post}}
+            {{- if eq .Name "Password" }}
+        hashedPassword,_ := models.HashPassword(posted_{{$.LowerName}}.Password)
+        // hashedPassword,_ := models.HashFunc(posted_{{$.LowerName}}.Password,s.Cfg))
+            {{- end }}
+        {{- end }}
+        {{- if eq .Name "UUID" }}
+        {{$.LowerName}}_uuid, _ := uuid.NewV7()
+            {{- end }}
+        {{- end }}
+
+        {{.LowerName}} := models.{{.Name}}{
+        {{- range .Fields}} {{- if .Post}}
+            {{- if eq .Name "Password" }}
+                {{.Name}}:  hashedPassword,
+            {{- else if eq .Name "UUID" }}
+                {{.Name}}:  {{$.LowerName}}_uuid.String(),
+            {{- else }}
+                {{.Name}}:  posted_{{.ModelName | toLowerCaseName }}.{{.Name}},
+            {{- end	}}
+        {{- end}}
+            {{- if eq .Name "UUID" }}
+               {{.Name}}:	{{$.LowerName}}_uuid.String(),
+            {{- end }}
+        {{- end}}
+                CreatedAt:   time.Now(),
+        }
+
+
+        err := tx.Create(&{{.LowerName}}).Error
+        if err != nil {
+            return &models.{{.Name}}{},fmt.Errorf("{{.LowerName}} creation failed: %v", err)
+        }
+
+
+		return &{{.LowerName}}, err
+}
+
+// GetOne fetches a {{.LowerName}} by ID
+func (s *{{ .AppName | toPascalCase }}Repository) GetOne{{.Name}}(ctx context.Context, id string) (*models.{{.Name}}, error) {
+    // checking Cache if it exists
+   	cacheKey := "{{.LowerName}}:" + id
+	if cached{{.Name}}, found := s.Cache.Get(cacheKey); found {
+		return cached{{.Name}}.(*models.{{.Name}}), nil
+	}
+
+
+	objID, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid ID: %v", err)
+	}
+
+	var {{.LowerName}} models.{{.Name}}
+	result := s.DB.WithContext(ctx).Model(&models.{{.Name}}{}).Where("id = ?", objID).Scan(&{{.LowerName}})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, fmt.Errorf("no {{.LowerName}}s found")
+	}
+
+    // Setting Cache before returning the {{.LowerName}}s
+    s.Cache.Set(cacheKey, &{{.LowerName}})
+
+	return &{{.LowerName}}, nil
+}
+
+// Get returns {{.LowerName}}s with pagination and search
+func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]any) ([]models.{{.Name}}Get, uint, error) {
+
+	// Build search query if any
+	// Create a base query
+	query := s.DB.Model(&models.{{.Name}}{})
+
+
+
+	// Apply search filters dynamically based on the provided searchTerm map
+	if len(searchTerm) > 0 {
+
+	    dialect := query.Statement.Dialector.Name()
+        var likeOp string
+        // Detect dialect
+        switch dialect {
+        case "postgres":
+            likeOp = "ILIKE ?" // Postgres supports ILIKE for case-insensitive search
+        default:
+            likeOp = "LIKE ?" // MySQL, SQLite, SQLServer, etc.
+        }
+
+		// Loop through the searchTerm map and dynamically apply filters( for boolean values)
+		for key, value := range searchTerm {
+			// Search logic for boolean values
+			if boolValue, ok := value.(string); ok && (boolValue == "true" || boolValue == "false") {
+				switch boolValue {
+				case "true":
+					query = query.Where(key+" = ?", true)
+				case "false":
+					query = query.Where(key+" = ?", false)
+
+				}
+				delete(searchTerm, key)
+			}
+
+		}
+
+		// Loop through the searchTerm map and dynamically apply filters
+		for key, value := range searchTerm {
+			// Apply "LIKE" condition for string fields (or exact match for other types)
+			if strValue, ok := value.(string); ok && strValue != "" {
+				//query = query.Or(key+" "+likeOp, "%"+strValue+"%")
+				query = query.Where(key+" "+likeOp, "%"+strValue+"%")
+			}
+		}
+	}
+
+	// Count all documents (no filter)
+	var totalCount int64
+	query.WithContext(ctx).Select("id").Count(&totalCount)
+
+
+	var {{.LowerName}}s []models.{{.Name}}Get
+	_ = pagination.Validate()
+	offset := int((pagination.Page - 1) * pagination.Size)
+	result := query.WithContext(ctx).Order("id desc").Limit(int(pagination.Size)).Offset(offset).Scan(&{{.LowerName}}s)
+	if result.Error != nil {
+		return nil, 0, result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return nil, 0, nil
+	}
+
+
+	return {{.LowerName}}s,uint(totalCount), nil
+}
+
+// Update modifies a {{.Name}}s by ID
+func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Context, existing *models.{{.Name}} ,patch_{{.LowerName}} *models.{{.Name}}Patch,tx *gorm.DB) (*models.{{.Name}}, error) {
+
+	// update User
+	{{.LowerName}} := *existing
+
+    updateFields := make(map[string]any)
+    {{- range .Fields}} {{- if .Patch}}
+    {{- if eq .Name "Password" }}
+    if patch_{{$.LowerName}}.{{.Name}} != nil {
+        // setting password string to hash
+        hashedPassword,_ := models.HashPassword(*patch_{{$.LowerName}}.Password)
+        // hashedPassword:= models.HashFunc(*patch_{{$.LowerName}}.Password,s.Cfg))
+                updateFields["{{.Name | camelToSnake }}"] = hashedPassword
+    }
+    {{- else if eq .Name "ID" }}
+
+    {{- else }}
+    if patch_{{$.LowerName}}.{{.Name}} != nil {
+        updateFields["{{.Name | camelToSnake }}"] = *patch_{{$.LowerName}}.{{.Name}}
+    }
+    {{- end	}}
+    {{- end}}
+    {{- end}}
+    updateFields["updated_at"]=time.Now()
+
+    // Update the document by ID
+    result := tx.WithContext(ctx).Model(&{{.LowerName}}).Updates(updateFields)
+    if result.Error != nil {
+        return &models.{{.Name}}{},fmt.Errorf("update failed: %v", result.Error)
+    }
+
+    if result.RowsAffected == 0 {
+        return &models.{{.Name}}{},fmt.Errorf("items does not exist found")
+    }
+
+    // Removing Cache if update success
+    cacheKey := "{{.LowerName}}:" + strconv.FormatUint(uint64({{.LowerName}}.ID),10)
+    s.Cache.Delete(cacheKey)
+    {{- if and (eq .AppName .AuthAppName) (eq .Name "User") }}
+    email := user.Email
+    s.Cache.Delete("user:login:" + email)
+    {{- end }}
+
+	return &{{.LowerName}}, nil
+}
+
+// Delete removes a {{.LowerName}} by ID
+func (s *{{ .AppName | toPascalCase }}Repository) Delete{{.Name}}(ctx context.Context, existing *models.{{.Name}}, tx *gorm.DB) error {
+
+
+    {{.LowerName}}:= *existing
+
+    err := tx.Delete(&{{.LowerName}}).Error
+    if err != nil {
+        return err
+    }
+
+    // Removing Cache if delete success
+    cacheKey := "{{.LowerName}}:" + strconv.FormatUint(uint64({{.LowerName}}.ID),10)
+    s.Cache.Delete(cacheKey)
+    {{- if and (eq .AppName .AuthAppName) (eq .Name "User") }}
+    email := user.Email
+    s.Cache.Delete("user:login:" + email)
+    {{- end }}
+
+
+	return err
+}

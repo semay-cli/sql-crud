@@ -1,0 +1,48 @@
+package concurrency
+
+import (
+	"context"
+	"fmt"
+	"runtime/debug"
+
+	"golang.org/x/sync/semaphore"
+)
+
+type Executor struct {
+	sem *semaphore.Weighted
+}
+
+func NewExecutor(maxWorkers int64) *Executor {
+	return &Executor{
+		sem: semaphore.NewWeighted(maxWorkers),
+	}
+}
+
+// Run executes fn in a new goroutine, bounded by semaphore.
+// It blocks until fn completes or context is canceled.
+func (e *Executor) Run(ctx context.Context, fn func(context.Context) error) error {
+	// Acquire BEFORE starting goroutine
+	if err := e.sem.Acquire(ctx, 1); err != nil {
+		return err
+	}
+
+	errCh := make(chan error, 1)
+
+	go func() {
+		defer e.sem.Release(1)
+		defer func() {
+			if r := recover(); r != nil {
+				errCh <- fmt.Errorf("panic: %v\n%s", r, debug.Stack())
+			}
+		}()
+
+		errCh <- fn(ctx)
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}

@@ -71,14 +71,32 @@
           {
             "name": "UUID",
             "type": "string",
-            "annotation": "gorm:\"constraint:not null; unique; type:string;\" json:\"uuid\"",
+            "annotation": "gorm:\"not null; unique;\" json:\"uuid,omitempty\"",
             "curd_flag": "true$false$false$false$true$false"
+          },
+          {
+            "name": "RedirectURL",
+            "type": "string",
+            "annotation": "gorm:\"type:string;\" json:\"redirect_url\"",
+            "curd_flag": "true$true$true$true$false$false"
+          },
+          {
+            "name": "SwaggerURL",
+            "type": "string",
+            "annotation": "gorm:\"constraint:not null; unique; type:string;\" json:\"swagger_url\"",
+            "curd_flag": "true$true$true$true$false$false"
+          },
+          {
+            "name": "RedirectON",
+            "type": "bool",
+            "annotation": "gorm:\"constraint:not null;\" json:\"redirect_on\"",
+            "curd_flag": "true$true$true$true$false$false"
           },
           {
             "name": "Active",
             "type": "bool",
             "annotation": "gorm:\"constraint:not null;\" json:\"active\"",
-            "curd_flag": "true$false$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false"
           },
           {
             "name": "Description",

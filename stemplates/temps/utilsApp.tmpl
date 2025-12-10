@@ -29,8 +29,9 @@ type UserClaim struct {
 
 func (repo *{{ .AuthAppName | toPascalCase }}Repository) PasswordsMatch(hashedPassword, currPassword string) bool {
 
-	var currPasswordHash = models.HashFunc(currPassword,repo.Cfg)
-	return hashedPassword == currPasswordHash
+    //  var currPasswordHash = models.HashFunc(currPassword, repo.Cfg)
+   // 	return hashedPassword == currPasswordHash
+	return models.PasswordsMatch(hashedPassword, currPassword)
 }
 
 // source of this token encode decode functions

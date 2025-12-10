@@ -1,35 +1,38 @@
-package repository
+package services
 
 import (
 	"context"
 	"{{ .ProjectName }}/cache"
 	"{{ .ProjectName }}/configs"
+	"{{ .ProjectName }}/{{ .AppName }}/repository"
 	"gorm.io/gorm"
 )
 
 
 
 // AppDatabase Service wraps Dababase service(SQL)
-type {{ .AppName | toPascalCase }}Repository struct {
+type {{ .AppName | toPascalCase }}Service struct {
 	DB *gorm.DB
 	Cache *cache.CacheService
 	Cfg   *configs.EnvConfig
+	Repo *repository.{{ .AppName | toPascalCase }}Repository
 }
 
 
 
-func InitRepository(client *gorm.DB, cacheService *cache.CacheService, cfg *configs.EnvConfig) *{{ .AppName | toPascalCase }}Repository {
+func InitService(client *gorm.DB, cacheService *cache.CacheService, cfg *configs.EnvConfig, repo *repository.{{ .AppName | toPascalCase }}Repository) *{{ .AppName | toPascalCase }}Service {
 
-	return &{{ .AppName | toPascalCase }}Repository{
+	return &{{ .AppName | toPascalCase }}Service{
 		DB:    client,
 		Cache: cacheService,
 		Cfg:   cfg,
+		Repo:  repo,
 	}
 
 }
 
 // Utility function for transactions
-func (s *{{ .AppName | toPascalCase }}Repository ) withTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
+func (s *{{ .AppName | toPascalCase }}Service ) withTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
     // Start the transaction with context (e.g., tracing)
     tx := s.DB.WithContext(ctx).Begin()
     if tx.Error != nil {
