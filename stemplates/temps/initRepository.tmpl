@@ -13,6 +13,8 @@ type {{ .AppName | toPascalCase }}Repository struct {
 	DB *gorm.DB
 	Cache *cache.CacheService
 	Cfg   *configs.EnvConfig
+	ForeignRegex *regexp.Regexp
+    NumberRegex  *regexp.Regexp
 }
 
 
@@ -23,6 +25,8 @@ func InitRepository(client *gorm.DB, cacheService *cache.CacheService, cfg *conf
 		DB:    client,
 		Cache: cacheService,
 		Cfg:   cfg,
+        ForeignRegex: regexp.MustCompile(`(?i)_id$`), // Prepare regex to check for *_id pattern
+        NumberRegex:  regexp.MustCompile(`^\d+$`),
 	}
 
 }
