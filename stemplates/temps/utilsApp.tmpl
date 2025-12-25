@@ -2,12 +2,19 @@ package  repository
 
 import (
 	"fmt"
-	"reflect"
+    "math/rand"
+    "reflect"
+    "strings"
+    "time"
+
+    "github.com/bwmarrin/snowflake"
+    "github.com/golang-jwt/jwt/v5"
+    "github.com/oklog/ulid/v2"
 	{{- if eq .AuthAppName .CurrentAppName }}
-	"time"
-	"{{.ProjectName}}/{{.CurrentAppName}}/models"
+		"{{.ProjectName}}/{{.CurrentAppName}}/models"
 	"github.com/golang-jwt/jwt/v5"
 	{{- end }}
+
 )
 
 {{- if eq .AuthAppName .CurrentAppName }}
@@ -148,4 +155,25 @@ func StructToMap(input any) (map[string]any, error) {
 	}
 
 	return result, nil
+}
+
+
+func generateULID10() string {
+	t := time.Now().UTC()
+	entropy := ulid.Monotonic(rand.New(rand.NewSource(t.UnixNano())), 0)
+
+	full := ulid.MustNew(ulid.Timestamp(t), entropy).String()
+	short := full[:10] // first 10 chars
+
+	return strings.ToUpper(short)
+}
+
+
+// generateSnowflake10 generates a Snowflake-based ID like "ATT-XXXXXXXXXX"
+func generateSnowflake10(node *snowflake.Node) string {
+	id := node.Generate().Base32() // Base32 encoding, uppercase
+	if len(id) > 10 {
+		id = id[:10] // truncate to 10 chars
+	}
+	return  id
 }

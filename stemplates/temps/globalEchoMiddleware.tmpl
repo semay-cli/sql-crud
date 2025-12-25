@@ -46,12 +46,12 @@ func SetRouteNameHeader(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 func NextAuthValidator(key string, ctx echo.Context) (bool, error) {
-	fmt.Println(ctx.Path())
+
 	if ctx.Path() == "/api/v1/blue_auth/login" || ctx.Path() == "/api/v1/blue_auth/stats" {
 		return true, nil
 	}
-	fmt.Println("Key: ", key)
-	fmt.Println("Route Name: ", ctx.Request().Header.Get("route-name"))
+    ctx.Logger().Info("Path: ", ctx.Path())
+    ctx.Logger().Info("Key: ", key)
 
 	//  You have to fix the NextAuthValidator function, it will let all values pass
 	// using required role access logic

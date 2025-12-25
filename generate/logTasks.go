@@ -17,9 +17,11 @@ func GenerateTasks(data stemplates.Data) {
 
 func GenerateLogs(data stemplates.Data) {
 	tmpl := stemplates.LoadTemplate("logs")
+	tmplZap := stemplates.LoadTemplate("zaplogger")
 	err := os.MkdirAll("logs", os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
 	stemplates.WriteTemplateToFile("logs/logfile.go", tmpl, data)
+	stemplates.WriteTemplateToFile("logs/zaplogger.go", tmplZap, data)
 }

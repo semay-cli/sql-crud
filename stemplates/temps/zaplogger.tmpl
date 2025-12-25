@@ -1,0 +1,286 @@
+package logs
+
+import (
+	"io"
+	"os"
+
+	"github.com/labstack/gommon/log"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+)
+
+/* ===================== */
+/* Logger definition    */
+/* ===================== */
+
+type Logger struct {
+	logger *zap.Logger
+	sugar  *zap.SugaredLogger
+	level  zap.AtomicLevel
+	output io.Writer
+}
+
+type Field map[string]any
+
+/* ===================== */
+/* Constructor          */
+/* ===================== */
+
+func NewZapLogger() *Logger {
+    atomicLevel := zap.NewAtomicLevelAt(zap.InfoLevel)
+
+    encoderCfg := zap.NewProductionEncoderConfig()
+    encoder := zapcore.NewJSONEncoder(encoderCfg)
+
+    // Open files
+    infoFile, _ := os.OpenFile("server.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+    errorFile, _ := os.OpenFile("server-error.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+
+    // Level filters
+    highPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+        return lvl >= zap.ErrorLevel
+    })
+    lowPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+        return lvl < zap.ErrorLevel
+    })
+
+    // Combine cores
+    core := zapcore.NewTee(
+        zapcore.NewCore(encoder, zapcore.AddSync(infoFile), lowPriority),
+        zapcore.NewCore(encoder, zapcore.AddSync(errorFile), highPriority),
+    )
+
+    l := zap.New(core)
+
+    return &Logger{
+        logger: l,
+        sugar:  l.Sugar(),
+        level:  atomicLevel,
+        output: os.Stdout,
+    }
+}
+
+
+// =====================
+// Optional "w" style for structured key/value logging
+// =====================
+
+// Infow allows calling Info with key/value pairs, like zap.SugaredLogger.Infow
+func (l *Logger) Infow(msg string, keysAndValues ...any) {
+	if len(keysAndValues)%2 != 0 {
+		// make sure pairs are complete
+		keysAndValues = append(keysAndValues, "<missing>")
+	}
+
+	j := make(map[string]any, len(keysAndValues)/2)
+	for i := 0; i < len(keysAndValues); i += 2 {
+		k, ok := keysAndValues[i].(string)
+		if !ok {
+			k = "invalid_key"
+		}
+		j[k] = keysAndValues[i+1]
+	}
+
+	// include the message as a field
+	j["msg"] = msg
+	l.Infoj(j)
+}
+
+// Errorw allows calling Error with key/value pairs, like zap.SugaredLogger.Errorw
+func (l *Logger) Errorw(msg string, keysAndValues ...any) {
+	if len(keysAndValues)%2 != 0 {
+		keysAndValues = append(keysAndValues, "<missing>")
+	}
+
+	j := make(map[string]any, len(keysAndValues)/2)
+	for i := 0; i < len(keysAndValues); i += 2 {
+		k, ok := keysAndValues[i].(string)
+		if !ok {
+			k = "invalid_key"
+		}
+		j[k] = keysAndValues[i+1]
+	}
+
+	j["msg"] = msg
+	l.Errorj(j)
+}
+
+func (l *Logger) Sync() {
+	l.logger.Sync()
+}
+
+/* ===================== */
+/* echo.Logger any/
+/* ===================== */
+
+func (l *Logger) Output() io.Writer {
+	return l.output
+}
+
+func (l *Logger) SetOutput(w io.Writer) {
+	l.output = w
+
+	ws := zapcore.AddSync(w)
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+		ws,
+		l.level,
+	)
+
+	l.logger = zap.New(core)
+	l.sugar = l.logger.Sugar()
+}
+
+func (l *Logger) Prefix() string {
+	return ""
+}
+
+func (l *Logger) SetPrefix(p string) {}
+
+func (l *Logger) SetHeader(h string) {}
+
+func (l *Logger) Level() log.Lvl {
+	switch l.level.Level() {
+	case zap.DebugLevel:
+		return log.DEBUG
+	case zap.InfoLevel:
+		return log.INFO
+	case zap.WarnLevel:
+		return log.WARN
+	case zap.ErrorLevel:
+		return log.ERROR
+	case zap.PanicLevel:
+		return 6
+	case zap.FatalLevel:
+		return 7
+	default:
+		return log.INFO
+	}
+}
+
+func (l *Logger) SetLevel(v log.Lvl) {
+	switch v {
+	case log.DEBUG:
+		l.level.SetLevel(zap.DebugLevel)
+	case log.INFO:
+		l.level.SetLevel(zap.InfoLevel)
+	case log.WARN:
+		l.level.SetLevel(zap.WarnLevel)
+	case log.ERROR:
+		l.level.SetLevel(zap.ErrorLevel)
+	case 6:
+		l.level.SetLevel(zap.PanicLevel)
+	case 7:
+		l.level.SetLevel(zap.FatalLevel)
+	}
+}
+
+/* ---- print ---- */
+
+func (l *Logger) Print(i ...any) {
+	l.sugar.Info(i...)
+}
+
+func (l *Logger) Printf(format string, args ...any) {
+	l.sugar.Infof(format, args...)
+}
+
+func (l *Logger) Printj(j log.JSON) {
+	l.sugar.Infow("print", mapToFields(j)...)
+}
+
+/* ---- debug ---- */
+
+func (l *Logger) Debug(i ...any) {
+	l.sugar.Debug(i...)
+}
+
+func (l *Logger) Debugf(format string, args ...any) {
+	l.sugar.Debugf(format, args...)
+}
+
+func (l *Logger) Debugj(j log.JSON) {
+	l.sugar.Debugw("debug", mapToFields(j)...)
+}
+
+/* ---- info ---- */
+
+func (l *Logger) Info(i ...any) {
+	l.sugar.Info(i...)
+}
+
+func (l *Logger) Infof(format string, args ...any) {
+	l.sugar.Infof(format, args...)
+}
+
+func (l *Logger) Infoj(j log.JSON) {
+	l.sugar.Infow("info", mapToFields(j)...)
+}
+
+/* ---- warn ---- */
+
+func (l *Logger) Warn(i ...any) {
+	l.sugar.Warn(i...)
+}
+
+func (l *Logger) Warnf(format string, args ...any) {
+	l.sugar.Warnf(format, args...)
+}
+
+func (l *Logger) Warnj(j log.JSON) {
+	l.sugar.Warnw("warn", mapToFields(j)...)
+}
+
+/* ---- error ---- */
+
+func (l *Logger) Error(i ...any) {
+	l.sugar.Error(i...)
+}
+
+func (l *Logger) Errorf(format string, args ...any) {
+	l.sugar.Errorf(format, args...)
+}
+
+func (l *Logger) Errorj(j log.JSON) {
+	l.sugar.Errorw("error", mapToFields(j)...)
+}
+
+/* ---- fatal ---- */
+
+func (l *Logger) Fatal(i ...any) {
+	l.sugar.Fatal(i...)
+}
+
+func (l *Logger) Fatalf(format string, args ...any) {
+	l.sugar.Fatalf(format, args...)
+}
+
+func (l *Logger) Fatalj(j log.JSON) {
+	l.sugar.Fatalw("fatal", mapToFields(j)...)
+}
+
+/* ---- panic ---- */
+
+func (l *Logger) Panic(i ...any) {
+	l.sugar.Panic(i...)
+}
+
+func (l *Logger) Panicf(format string, args ...any) {
+	l.sugar.Panicf(format, args...)
+}
+
+func (l *Logger) Panicj(j log.JSON) {
+	l.sugar.Panicw("panic", mapToFields(j)...)
+}
+
+/* ===================== */
+/* Helpers               */
+/* ===================== */
+
+func mapToFields(j log.JSON) []any {
+	fields := make([]any, 0, len(j)*2)
+	for k, v := range j {
+		fields = append(fields, k, v)
+	}
+	return fields
+}

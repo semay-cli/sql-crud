@@ -1,0 +1,91 @@
+
+package manager
+
+import (
+	"bytes"
+	"io"
+	"net/http"
+	//"io/ioutil"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	//"go.uber.org/zap"
+	"{{.ProjectName}}/logs"
+
+)
+
+
+const maxLogSize = 1024 // maximum bytes to log for request/response
+
+// truncate safely shortens the content to max bytes
+func truncate(b []byte, max int) string {
+	if len(b) <= max {
+		return string(b)
+	}
+	return string(b[:max]) + "...(truncated)"
+}
+
+// bodyWriter wraps http.ResponseWriter to capture response body
+type bodyWriter struct {
+	io.Writer
+	http.ResponseWriter
+	body *bytes.Buffer
+}
+
+func (w *bodyWriter) Write(b []byte) (int, error) {
+	w.body.Write(b) // capture
+	return w.ResponseWriter.Write(b)
+}
+
+// RequestLogger logs request and response with truncated bodies
+func ZapRequestLogger(logger *logs.Logger) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			start := time.Now()
+
+			// --- Capture request body ---
+			reqBodyBytes, _ := io.ReadAll(c.Request().Body)
+			c.Request().Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
+
+			// --- Capture response body ---
+			resBody := &bytes.Buffer{}
+			originalWriter := c.Response().Writer
+			c.Response().Writer = &bodyWriter{
+				ResponseWriter: originalWriter,
+				Writer:         originalWriter,
+				body:           resBody,
+			}
+
+			// --- Process request ---
+			err := next(c)
+			stop := time.Now()
+			latency := stop.Sub(start)
+
+			// --- Log fields ---
+			fields := []logs.Field{
+				{"time": stop},
+				{"remote_ip": c.RealIP()},
+				{"host": c.Request().Host},
+				{"method": c.Request().Method},
+				{"uri": c.Request().RequestURI},
+				{"user_agent": c.Request().UserAgent()},
+				{"status": c.Response().Status},
+				{"latency": latency},
+				{"bytes_in": c.Request().ContentLength},
+				{"bytes_out": c.Response().Size},
+				{"request_body": truncate(reqBodyBytes, maxLogSize)},
+				{"response_body": truncate(resBody.Bytes(), maxLogSize)},
+			}
+
+			if err != nil {
+				c.Error(err)
+				fields = append(fields, logs.Field{"error": err.Error()})
+				logger.Error("request failed", fields...)
+			} else {
+				logger.Info("request completed", fields...)
+			}
+
+			return err
+		}
+	}
+}

@@ -2,11 +2,12 @@ package services
 
 import (
 	"fmt"
+	"context"
 	"{{.ProjectName}}/{{ .CurrentAppName}}/repository"
 	)
 
-func (s *{{ .CurrentAppName | toPascalCase }}Service) Login(email, password string) (string, error) {
-	token, err := s.Repo.Login(email, password)
+func (s *{{ .CurrentAppName | toPascalCase }}Service) Login(email, password string, ctx context.Context) (string, error) {
+	token, err := s.Repo.Login(email, password, ctx)
     if err != nil {
         return "", fmt.Errorf("login failed: %w", err)
     }

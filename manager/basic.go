@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/semay-cli/sql-crud/dist"
 	"github.com/semay-cli/sql-crud/generate"
 	"github.com/semay-cli/sql-crud/stemplates"
 	"github.com/spf13/cobra"
@@ -186,6 +187,8 @@ func handleProjectType(projectType, frame string, cmd *cobra.Command) {
 		stemplates.RenderData.ProjectName = stemplates.ProjectSettings.ProjectName
 		stemplates.RenderData.AppNames = stemplates.ProjectSettings.AppNames
 		generate.GenerateCrons(stemplates.RenderData)
+	case "ui":
+		dist.SSOAdminUI()
 
 	default:
 		fmt.Println(frame)

@@ -17,8 +17,10 @@ func GenerateEchoAppMiddleware(data stemplates.Data) {
 
 func GenerateGlobalEchoAppMiddleware(data stemplates.Data) {
 	tmpl := stemplates.LoadTemplate("globalEchoMiddleware")
+	tmplZap := stemplates.LoadTemplate("globalZapMiddleware")
 
 	stemplates.WriteTemplateToFile("manager/middleware.go", tmpl, data)
+	stemplates.WriteTemplateToFile("manager/zapmiddleware.go", tmplZap, data)
 }
 
 func GenerateAppEchoGlobal(data stemplates.Data) {

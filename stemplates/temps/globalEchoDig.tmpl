@@ -16,6 +16,7 @@ import (
 
 	"{{.ProjectName}}/cache"
 	"{{.ProjectName}}/configs"
+	"{{.ProjectName}}/logs"
 	"{{.ProjectName}}/crons"
 	"{{.ProjectName}}/database"
 	"{{.ProjectName}}/observe"
@@ -47,6 +48,7 @@ var (
 				dig.In
 				App                *echo.Echo
 				Cfg                *configs.EnvConfig
+				Logger             *logs.Logger
 				{{- range .AppNames}}
 				{{ . | toPascalCase }}Ctrl      *{{ . | replaceString }}_ctrl.{{ . | toPascalCase }}Controller           `name:"{{ . | replaceString }}_controller"`
 
@@ -62,11 +64,13 @@ var (
 				deps.Scheduler.Start()
 
 				// starting server
-				go startServer(deps.App, deps.Cfg)
+				go startServer(deps.App, deps.Cfg,deps.Logger)
 
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				waitForShutdown(deps.App, ctx)
+				waitForShutdown(deps.App, ctx,deps.Logger)
+
+				defer deps.Logger.Sync()
 			})
 			if err != nil {
 				log.Fatalf("Error starting application: %v", err)
@@ -79,11 +83,17 @@ var (
 
 // ---- Echo Setup ----
 
-func NewEchoApp(cfg *configs.EnvConfig, appTracer oteltrace.Tracer, prom *prometheus.Registry) *echo.Echo {
+func NewEchoApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrace.Tracer, prom *prometheus.Registry) *echo.Echo {
 	app := echo.New()
+
+	app.Logger = logger
 
 	app.Use(middleware.Recover())
 	app.Use(middleware.CORS())
+
+
+    // Zap logging mouter
+    app.Use(ZapRequestLogger(logger))
 
 	// 👇 Custom OpenTelemetry middleware
 	app.Use(NewOTelEchoSpanStarter(appTracer))
@@ -137,28 +147,28 @@ func NewEchoApp(cfg *configs.EnvConfig, appTracer oteltrace.Tracer, prom *promet
 }
 
 // ---- Graceful Shutdown ----
-
-func waitForShutdown(app *echo.Echo, ctx context.Context) {
+func waitForShutdown(app *echo.Echo, ctx context.Context, logger *logs.Logger) {
 	<-ctx.Done()
-	fmt.Println("Gracefully shutting down...")
+	logger.Info("Gracefully shutting down...")
 
 	ctxTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := app.Shutdown(ctxTimeout); err != nil {
-		fmt.Println(err)
+		// app_errors := logs.Field{"error": err.Error()}
+		logger.Error("Error during server shutdown: ", err)
 	}
-	fmt.Println("Shutdown complete.")
+	logger.Info("Shutdown complete.")
 }
 
 // ---- Start Server ----
-
-func startServer(app *echo.Echo, cfg *configs.EnvConfig) {
+func startServer(app *echo.Echo, cfg *configs.EnvConfig, logger *logs.Logger) {
 	if app_otel == "on" {
 		tp := observe.InitTracer(cfg)
 		defer func() {
 			if err := tp.Shutdown(context.Background()); err != nil {
-				log.Printf("Error shutting down tracer provider: %v", err)
+				// app_errors := logs.Field{"error": err.Error()}
+				logger.Error("error shutting down tracer provider: %v", err)
 			}
 		}()
 	}
@@ -173,6 +183,8 @@ func startServer(app *echo.Echo, cfg *configs.EnvConfig) {
 	}
 }
 
+
+
 // ---- Dependency Injection Container ----
 
 func buildContainer() *dig.Container {
@@ -186,6 +198,9 @@ func buildContainer() *dig.Container {
 
 	// Provide configuration
 	mustProvide(container.Provide(configs.NewEnvConfig))
+
+	// zap Logger
+	mustProvide(container.Provide(logs.NewZapLogger ))
 
 	// Provide Cron engine
 	container.Provide(func() *cron.Cron {
@@ -257,7 +272,7 @@ func buildContainer() *dig.Container {
 		dig.In
 		Crn   *cron.Cron
 		Cfg   *configs.EnvConfig
-	{{- range .AppNames}}
+		{{- range .AppNames}}
 		{{ . | toPascalCase }}Repo *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository           `name:"{{ . | replaceString }}_repo"`
 	{{- end }}
 	}) *crons.ScheduledService {
@@ -270,8 +285,8 @@ func buildContainer() *dig.Container {
 
 
 	// Provide Echo app
-	mustProvide(container.Provide(func(cfg *configs.EnvConfig, appTracer oteltrace.Tracer, prom *prometheus.Registry) *echo.Echo {
-		return NewEchoApp(cfg, appTracer, prom)
+	mustProvide(container.Provide(func(cfg *configs.EnvConfig,  appTracer oteltrace.Tracer, prom *prometheus.Registry, logger *logs.Logger) *echo.Echo {
+		return NewEchoApp(cfg,logger ,appTracer, prom)
 	}))
 
 	return container

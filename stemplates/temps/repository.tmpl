@@ -131,18 +131,18 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Cont
 
 		}
 
-		// Loop through the searchTerm map and dynamically apply filters
-		for key, value := range searchTerm {
-			// Apply "LIKE" condition for string fields (or exact match for other types)
-			if s.ForeignRegex.MatchString(key) || s.NumberRegex.MatchString(strValue) {
-                // Exact match for *_id keys
-                query = query.Where(key+" = ?", strValue)
-            } else {
-                // Fuzzy match for others
-                //query = query.Or(key+" "+likeOp, "%"+strValue+"%")
-                query = query.Where(key+" "+likeOp, "%"+strValue+"%")
+		// Loop through the remaining searchTerm map and dynamically apply filters
+        for key, value := range searchTerm {
+            if strValue, ok := value.(string); ok && strValue != "" {
+                if s.ForeignRegex.MatchString(key) || s.NumberRegex.MatchString(strValue) {
+                    // Exact match for *_id keys
+                    query = query.Where(key+" = ?", strValue)
+                } else {
+                    // Fuzzy match for others
+                    query = query.Where(key+" "+likeOp, "%"+strValue+"%")
+                }
             }
-		}
+        }
 	}
 
 	// Count all documents (no filter)

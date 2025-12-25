@@ -19,8 +19,11 @@ func {{ .AppName | toPascalCase }}LogClear() {
 	databaseLoggerFile, _ := database.LoggerFile("{{ .AppName | replaceString }}")
 	defer databaseLoggerFile.Close()
 	//  App should not start
-	log_file, _ := logs.Logfile("{{ .AppName | replaceString }}")
-	defer log_file.Close()
+	log_file, _ := logs.Logfile("server")
+    defer log_file.Close()
+
+    error_log_file, _ := logs.Logfile("server-error")
+    defer log_file.Close()
 
 	// Move{{ .AppName | toPascalCase }}Logs()()
 
@@ -29,9 +32,13 @@ func {{ .AppName | toPascalCase }}LogClear() {
 		fmt.Println("Error truncating gorm logger file:", err)
 	}
 	lerr := log_file.Truncate(0)
-	if lerr != nil {
-		fmt.Println("Error truncating log file:", err)
-	}
+    if lerr != nil {
+        fmt.Println("Error truncating log file:", err)
+    }
+    eerr := error_log_file.Truncate(0)
+    if eerr != nil {
+        fmt.Println("Error truncating log file:", err)
+    }
 
 }
 

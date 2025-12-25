@@ -2,11 +2,12 @@ package repository
 
 import (
 	"fmt"
+	"context"
 
 	"{{.ProjectName}}/{{ .CurrentAppName}}/models"
 	)
 
-func (s *{{ .CurrentAppName | toPascalCase }}Repository) Login(email, password string) (string, error) {
+func (s *{{ .CurrentAppName | toPascalCase }}Repository) Login(email, password string,contx context.Context) (string, error) {
         var user *models.User
         cacheKey := "user:login:" + email
 
@@ -16,7 +17,7 @@ func (s *{{ .CurrentAppName | toPascalCase }}Repository) Login(email, password s
         } else {
             // 2. Fetch from DB if not in cache
             u := &models.User{}
-            if err := s.DB.Where("email = ? AND disabled = ?", email, false).
+            if err := s.DB.WithContext(contx).Where("email = ? AND disabled = ?", email, false).
                 Preload("Groups").
                 Preload("Scopes").
                 First(u).Error; err != nil {
