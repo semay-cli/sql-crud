@@ -76,7 +76,7 @@ func InstallSSOhApp(userName, projectName, authAppName string) {
 	stemplates.RenderData.AppNames = stemplates.ProjectSettings.AppNames
 	stemplates.RenderData.CurrentAppName = authAppName
 	stemplates.ProjectSettings.CurrentAppName = authAppName
-
+	generate.GenerateSQLCModels(stemplates.RenderData)
 	generate.GenerateTasks(stemplates.RenderData)
 	// generate.GenerateConfigTestEnv(stemplates.RenderData)
 	// generate.GenerateEchoCoverage(stemplates.RenderData)

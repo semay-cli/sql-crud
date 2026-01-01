@@ -6,6 +6,7 @@ import (
 	{{- range .AppNames}}
 	{{ . | replaceString }} "{{$.ProjectName}}/{{ . }}/models"
 	"{{$.ProjectName}}/configs"
+	"{{$.ProjectName}}/logs"
 	{{- end }}
 	"github.com/spf13/cobra"
 	"go.uber.org/dig"
@@ -26,13 +27,13 @@ var (
 			// if enviroment variable not provided setting default to dev
 			container := buildContainer()
 
-			err := container.Invoke(func(cfg *configs.EnvConfig) {
+			err := container.Invoke(func(cfg *configs.EnvConfig, logger *logs.Logger) {
 				cfg.SetEnv(env)
 			switch migrateType {
 			case "create":
-				init_migrate(appName,cfg)
+				init_migrate(appName,cfg, logger)
 			default:
-				populate_migrate(appName,cfg)
+				populate_migrate(appName,cfg, logger)
 			}
 			})
 			if err != nil {
@@ -51,9 +52,9 @@ var (
 			// if enviroment variable not provided setting default to dev
 			container := buildContainer()
 
-			err := container.Invoke(func(cfg *configs.EnvConfig) {
+			err := container.Invoke(func(cfg *configs.EnvConfig, logger *logs.Logger) {
 				cfg.SetEnv(env)
-				clean_database(appName, cfg)
+				clean_database(appName, cfg, logger)
 			})
 			if err != nil {
 				fmt.Println(err)
@@ -68,8 +69,8 @@ var (
 		Long:  "Create super user",
 		Run: func(cmd *cobra.Command, args []string) {
             container := buildContainer()
-			err := container.Invoke(func(cfg *configs.EnvConfig) {
-			{{ .AuthAppName | replaceString }}.CreateSuperUser(cfg)
+			err := container.Invoke(func(cfg *configs.EnvConfig, logger *logs.Logger) {
+			{{ .AuthAppName | replaceString }}.CreateSuperUser(cfg, logger)
 			})
 			if err != nil {
 				fmt.Println(err)
@@ -93,15 +94,18 @@ func buildMigrationContainer() *dig.Container {
 	// Provide configuration
 	mustProvide(container.Provide(configs.NewEnvConfig))
 
+	// zap Logger
+	mustProvide(container.Provide(logs.NewZapLogger ))
+
 	return container
 }
 
 
-func init_migrate(app_name string,cfg *configs.EnvConfig) {
+func init_migrate(app_name string,cfg *configs.EnvConfig, logger *logs.Logger) {
 	switch app_name{
     {{- range .AppNames}}
 	case "{{ . }}":
-		{{ . | replaceString }}.InitDatabase(false,cfg)
+		{{ . | replaceString }}.InitDatabase(false,cfg, logger)
 		fmt.Println("Migrated {{ . }} Database Models sucessfully")
     {{- end }}
 	default:
@@ -109,10 +113,10 @@ func init_migrate(app_name string,cfg *configs.EnvConfig) {
 	}
 }
 
-func populate_migrate(app_name string, cfg *configs.EnvConfig) {
+func populate_migrate(app_name string, cfg *configs.EnvConfig, logger *logs.Logger) {
 {{- if eq .AuthAppType "standalone" }}
     {{- range .AppNames }}
-        {{ replaceString . }}.Populate(false,cfg)
+        {{ replaceString . }}.Populate(false,cfg, logger)
     {{- end }}
     fmt.Println("Auth Populated Successfully. Database Models populated successfully.")
 {{- end }}
@@ -121,7 +125,7 @@ func populate_migrate(app_name string, cfg *configs.EnvConfig) {
 	switch app_name {
     {{- range .AppNames }}
 	case "{{ . }}":
-        {{ replaceString . }}.ResourceMigration(cfg)
+        {{ replaceString . }}.ResourceMigration(cfg,logger)
     	fmt.Println("{{ . }} Resources Created Successfully. Database Models populated successfully.")
     {{- end }}
 	default:
@@ -132,11 +136,11 @@ func populate_migrate(app_name string, cfg *configs.EnvConfig) {
 }
 
 
-func clean_database(app_name string,cfg *configs.EnvConfig) {
+func clean_database(app_name string,cfg *configs.EnvConfig, logger *logs.Logger) {
 	switch app_name{
 	{{- range .AppNames}}
 	case "{{ . }}":
-		{{ . | replaceString }}.CleanDatabase(false,cfg)
+		{{ . | replaceString }}.CleanDatabase(false,cfg, logger)
 		fmt.Println("Dropped Tables sucessfully")
 	{{- end}}
 	default:

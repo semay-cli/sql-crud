@@ -24,6 +24,7 @@ func runServiceCommand(cmd *cobra.Command, args []string) {
 	stemplates.InitProjectJSON()
 	// framework, _ := cmd.Flags().GetString("frame")
 	appName, _ := cmd.Flags().GetString("app")
+	ormType, _ := cmd.Flags().GetString("orm")
 
 	if appName == "" {
 		fmt.Println("Error: --app flag is required.")
@@ -42,8 +43,13 @@ func runServiceCommand(cmd *cobra.Command, args []string) {
 	//stemplates.ProjectSettings.AuthAppName = appName
 
 	generate.GenerateUtilsApp(stemplates.ProjectSettings)
+	if ormType == "sqlc" {
+		generate.GenerateServicesSQLC(stemplates.RenderData)
+	} else {
+		generate.GenerateServices(stemplates.RenderData)
+	}
 	generate.GenerateServicesInit(stemplates.RenderData)
-	generate.GenerateServices(stemplates.RenderData)
+	// generate.GenerateServices(stemplates.RenderData)
 	stemplates.CommonCMD()
 
 }
@@ -53,6 +59,7 @@ func init() {
 	servicecli.Flags().StringVarP(&config_file, "config", "c", "config.json", "Specify the data file to load")
 	// servicecli.Flags().StringP("frame", "f", "", "frame work to use for building the")
 	servicecli.Flags().StringP("app", "a", "", "Set app name, e.g., \"blue-auth\"")
+	servicecli.Flags().StringP("orm", "o", "", "Set orm name, e.g., \"sqlc\"")
 
 	// Register commands to the root (goFrame)
 

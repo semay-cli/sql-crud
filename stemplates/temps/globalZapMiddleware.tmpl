@@ -80,9 +80,9 @@ func ZapRequestLogger(logger *logs.Logger) echo.MiddlewareFunc {
 			if err != nil {
 				c.Error(err)
 				fields = append(fields, logs.Field{"error": err.Error()})
-				logger.Error("request failed", fields...)
+				logger.Error("request failed", fields)
 			} else {
-				logger.Info("request completed", fields...)
+				logger.Info("request completed", fields)
 			}
 
 			return err

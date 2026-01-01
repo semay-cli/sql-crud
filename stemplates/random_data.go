@@ -22,14 +22,16 @@ func randomString(n int) string {
 	return string(result)
 }
 
+// string with each element in double quotes, replacing "$exact" with the base part.
 func formatSliceToString(slice []string) string {
-	// Wrap each element with double quotes
 	quotedSlice := make([]string, len(slice))
+
 	for i, v := range slice {
-		quotedSlice[i] = `"` + v + `"`
+		// If the string contains "$exact", take only the part before it
+		base := strings.Split(v, "$exact")[0]
+		quotedSlice[i] = `"` + base + `"`
 	}
 
-	// Join the quoted elements with ", " separator
 	return strings.Join(quotedSlice, ", ")
 }
 
@@ -150,18 +152,66 @@ func ToPascalCase(input string) string {
 	return strings.Join(parts, "")
 }
 
-// PascalToSnake converts a PascalCase string to snake_case
-func PascalToSnake(input string) string {
-	// Insert an underscore before all capital letters (except the first)
-	re := regexp.MustCompile("([A-Z][a-z0-9]*)")
-	matches := re.FindAllStringSubmatch(input, -1)
-
-	var words []string
-	for _, match := range matches {
-		words = append(words, strings.ToLower(match[0]))
+func ToCustomPascalCase(s string) string {
+	// Special handling for completely uppercase strings like UUID
+	if strings.ToUpper(s) == s {
+		// If the string is all uppercase, convert only the first letter to uppercase
+		return string(unicode.ToUpper(rune(s[0]))) + strings.ToLower(s[1:])
 	}
 
-	return strings.Join(words, "_")
+	var result string
+	upperFlag := false
+
+	for i, c := range s {
+		if i == 0 {
+			// Always capitalize the first letter (if it's not already)
+			result += string(unicode.ToUpper(c))
+			upperFlag = false
+		} else {
+			// Convert to PascalCase logic: start new word if uppercase
+			if unicode.IsUpper(c) {
+				// If uppercase and it's not the first letter of the word, make lowercase
+				if upperFlag {
+					result += string(unicode.ToLower(c))
+				} else {
+					result += string(c)
+					upperFlag = true
+				}
+			} else {
+				// Add normal lowercase letters
+				result += string(c)
+				upperFlag = false
+			}
+		}
+	}
+
+	return result
+}
+
+// PascalToSnake converts a PascalCase string to snake_case
+// func PascalToSnake(input string) string {
+// 	// Insert an underscore before all capital letters (except the first)
+// 	re := regexp.MustCompile("([A-Z][a-z0-9]*)")
+// 	matches := re.FindAllStringSubmatch(input, -1)
+
+// 	var words []string
+// 	for _, match := range matches {
+// 		words = append(words, strings.ToLower(match[0]))
+// 	}
+
+// 	return strings.Join(words, "_")
+// }
+
+// PascalToSnake converts a PascalCase string to snake_case
+// It ensures acronyms like 'ID' are converted to 'id' instead of 'i_d'
+func PascalToSnake(input string) string {
+	// Insert an underscore before all capital letters (except the first)
+	// This regex matches groups of uppercase letters followed by lowercase letters or numbers
+	re := regexp.MustCompile("([a-z0-9])([A-Z])")
+	input = re.ReplaceAllString(input, "${1}_${2}")
+
+	// Convert the entire string to lowercase
+	return strings.ToLower(input)
 }
 
 // PascalToWords converts PascalCase or camelCase to "Word Word" format
@@ -204,6 +254,114 @@ func getFirstLetters(input string) string {
 	return result.String()
 }
 
+func ToInitials(s string) string {
+	if s == "" {
+		return ""
+	}
+
+	// Normalize separators to spaces
+	s = strings.ReplaceAll(s, "_", " ")
+	s = strings.ReplaceAll(s, "-", " ")
+
+	var result []rune
+	var prev rune
+
+	for i, r := range s {
+		if !unicode.IsLetter(r) {
+			prev = r
+			continue
+		}
+
+		// First letter always included
+		if i == 0 {
+			result = append(result, unicode.ToLower(r))
+			prev = r
+			continue
+		}
+
+		// New word after separator
+		if prev == ' ' {
+			result = append(result, unicode.ToLower(r))
+		} else if unicode.IsUpper(r) && unicode.IsLower(prev) {
+			// camelCase boundary
+			result = append(result, unicode.ToLower(r))
+		}
+
+		prev = r
+	}
+
+	return string(result)
+}
+
+func goToSQLType(goType string) string {
+	switch goType {
+	case "uint", "int", "int64":
+		return "BIGINT"
+	case "string":
+		return "TEXT"
+	case "bool":
+		return "BOOLEAN"
+	case "float64":
+		return "DOUBLE PRECISION"
+	case "time.Time":
+		return "TIMESTAMP"
+	case "sql.NullInt64":
+		return "BIGINT"
+	case "[]string":
+		return "TEXT[]"
+	case "[]int":
+		return "BIGINT[]"
+	// Add other type mappings as needed
+	default:
+		return "TEXT" // Fallback to TEXT for unknown types
+	}
+}
+
+func isArray(goType string) bool {
+	return strings.HasPrefix(goType, "[]") // Checks if the type is a slice (e.g., []string, []User, etc.)
+}
+
+func isValid(input string) bool {
+	parts := strings.Split(input, "$")
+	for _, part := range parts {
+		if part == "exact" {
+			return false
+		}
+	}
+	return true
+}
+
+// 2️⃣ Returns the part before "$exact", or the whole string if not present
+func getBase(input string) string {
+	parts := strings.Split(input, "$exact")
+	return parts[0]
+}
+
+func getLastPart(input string) string {
+	parts := strings.Split(input, "$")
+	return parts[len(parts)-1] // last element
+}
+
+func inSlice(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func appendSlice(slice []string, s string) []string {
+	return append(slice, s)
+}
+
+func makeSlice(n int) []string {
+	if n <= 0 {
+		return []string{}
+	}
+	return make([]string, 0, n)
+}
+
 var FuncMap = template.FuncMap{
 	"camelToSnake":            CamelToSnake,            // Register CamelToSnake function
 	"add":                     add,                     // Register Add function
@@ -230,6 +388,17 @@ var FuncMap = template.FuncMap{
 	"snakeToWord":             SnakeToWords,            // Register SnakeToWords function
 	"capitalize":              capitalize,              // Register capitalize function
 	"getFirstLetters":         getFirstLetters,         // Register getFirstLetters function
+	"goToSQLType":             goToSQLType,             // Register goToSQLType function
+	"isArray":                 isArray,                 // Register isArray function
+	"toInitials":              ToInitials,              // Register toInitials function
+	"isValid":                 isValid,                 // Register isValid function
+	"getBase":                 getBase,                 // Register getBase function
+	"getLastPart":             getLastPart,             // Register getLastPart function
+	"inSlice":                 inSlice,                 // Register inSlice function
+	"appendSlice":             appendSlice,             // Register appendSlice function
+	"makeSlice":               makeSlice,               // Register makeSlice function
+	"toCustomPascalCase":      ToCustomPascalCase,      // Register toCustomPascalCase function
+
 }
 
 func add(a int, b int) int {

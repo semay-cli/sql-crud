@@ -51,7 +51,7 @@ func NextAuthValidator(key string, ctx echo.Context) (bool, error) {
 		return true, nil
 	}
     ctx.Logger().Info("Path: ", ctx.Path())
-    ctx.Logger().Info("Key: ", key)
+    // ctx.Logger().Info("Key: ", key)
 
 	//  You have to fix the NextAuthValidator function, it will let all values pass
 	// using required role access logic

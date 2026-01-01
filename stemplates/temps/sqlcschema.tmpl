@@ -1,0 +1,22 @@
+{{- $rendered := makeSlice 0 }} 
+{{range .Models}}
+-- Create table for {{.TableName}}
+CREATE TABLE {{.LowerName}}s (
+    {{ range .Fields}}
+    {{- if not (isArray .Type)}}{{.Name | toSnakeCase}} {{.DBType}},
+    {{end}}
+    {{- end}}created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+);
+
+{{- range .Relations }}{{- if .MtM }}{{- if not (inSlice $rendered .TableName) }}
+  -- Create many-to-many table for {{.TableName}}
+CREATE TABLE {{.TableName}} (
+    {{.LowerParentName}}_id INTEGER NOT NULL,
+    {{.LowerFieldName}}_id INTEGER NOT NULL,
+    PRIMARY KEY ({{.LowerParentName}}_id, {{.LowerFieldName}}_id),
+    FOREIGN KEY ({{.LowerParentName}}_id) REFERENCES {{.LowerParentName}}s(id) ON DELETE CASCADE,
+    FOREIGN KEY ({{.LowerFieldName}}_id) REFERENCES {{.LowerFieldName}}s(id) ON DELETE CASCADE
+);{{- $rendered = appendSlice $rendered .TableName }}
+{{ end }}{{- end }}{{- end }}{{end}}

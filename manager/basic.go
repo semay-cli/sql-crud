@@ -182,6 +182,17 @@ func handleProjectType(projectType, frame string, cmd *cobra.Command) {
 			generate.GenerateAPIClientJS(stemplates.RenderData)
 			generate.GenerateFormSchemaZOD(stemplates.RenderData)
 		}
+	case "sqlc":
+		appName, _ := cmd.Flags().GetString("app")
+		if appName == "" {
+			fmt.Println("sqlc needs app flag")
+		} else {
+			stemplates.RenderData.ProjectName = stemplates.ProjectSettings.ProjectName
+			stemplates.RenderData.AppName = appName
+			stemplates.RenderData.AppNames = stemplates.ProjectSettings.AppNames
+
+			generate.GenerateSQLCModels(stemplates.RenderData)
+		}
 	case "cron":
 		stemplates.InitProjectJSON()
 		stemplates.RenderData.ProjectName = stemplates.ProjectSettings.ProjectName

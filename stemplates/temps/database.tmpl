@@ -1,18 +1,24 @@
 package database
 
 import (
+	"database/sql"
 	"log"
 	"os"
 	"time"
 	"fmt"
 	"strings"
-
-	"gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
+	sqldblogger "github.com/simukti/sqldb-logger"
+	"github.com/simukti/sqldb-logger/logadapter/zapadapter"
+	"github.com/go-sql-driver/mysql"
+	"github.com/lib/pq"
+	"github.com/mattn/go-sqlite3"
+	gormMysql "gorm.io/driver/mysql"
+	gormPostgres "gorm.io/driver/postgres"
+	gormSqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormLog "gorm.io/gorm/logger"
 	"{{.ProjectName}}/configs"
+	"{{.ProjectName}}/logs"
 	"gorm.io/plugin/opentelemetry/tracing"
 )
 
@@ -25,112 +31,72 @@ func LoggerFile(app_name string) (*os.File, error) {
 	return gormLogFile, nil
 }
 
-func ReturnSession(app_name string, cfg *configs.EnvConfig) (*gorm.DB, error) {
-
-	//  setting up database connection based on DB type
+func ReturnSession(app_name string, cfg *configs.EnvConfig, zapLogger *logs.Logger) (*gorm.DB, error) {
 	env_name := fmt.Sprintf("%s_DB_TYPE", strings.ToUpper(app_name))
 	app_env := cfg.Get(env_name)
-	//  This is file to output gorm logger on to
-	gormlogger, _ := LoggerFile(app_name)
-	gormFileLogger := log.Logger{}
-	gormFileLogger.SetOutput(gormlogger)
-	gormFileLogger.Writer()
 
-	gormLogger := log.New(gormFileLogger.Writer(), "\r\n", log.LstdFlags|log.Ldate|log.Ltime|log.Lshortfile)
-	newLogger := logger.New(
-		gormLogger, // io writer
-		logger.Config{
-			SlowThreshold:             time.Second, // Slow SQL threshold
-			LogLevel:                  logger.Info, // Log level
-			Colorful:                  true,        // Enable color
-			IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
-			// ParameterizedQueries:      true,        // Don't include params in the SQL log
-
+	// GORM Internal Logger setup (for GORM specific events)
+	gormFile, _ := LoggerFile(app_name)
+	newLogger := gormLog.New(
+		log.New(gormFile, "\r\n", log.LstdFlags),
+		gormLog.Config{
+			SlowThreshold:             time.Second,
+			LogLevel:                  gormLog.Info,
+			Colorful:                  true,
+			IgnoreRecordNotFoundError: true,
 		},
 	)
 
-	var DBSession *gorm.DB
+	var (
+		DBSession *gorm.DB
+		sqlDB     *sql.DB
+		err       error
+		adapter   = zapadapter.New(zapLogger.GetZapLogger()) // Use the raw *zap.Logger
+	)
 
+	// Universal switch for driver wrapping
 	switch app_env {
 	case "postgres":
-		db, err := gorm.Open(postgres.New(postgres.Config{
-			DSN:                  cfg.Get(fmt.Sprintf("%s_POSTGRES_URI", strings.ToUpper(app_name))),
-			PreferSimpleProtocol: true, // disables implicit prepared statement usage,
+		dsn := cfg.Get(fmt.Sprintf("%s_POSTGRES_URI", strings.ToUpper(app_name)))
+		sqlDB = sqldblogger.OpenDriver(dsn, &pq.Driver{}, adapter)
+		DBSession, err = gorm.Open(gormPostgres.New(gormPostgres.Config{
+			Conn:                 sqlDB,
+			PreferSimpleProtocol: true,
+		}), &gorm.Config{Logger: newLogger, SkipDefaultTransaction: true})
 
-		}), &gorm.Config{
-			DisableForeignKeyConstraintWhenMigrating: false,
-			Logger:                                   newLogger,
-			SkipDefaultTransaction:                   true,
-		})
-		if err != nil {
-			panic(err)
-		}
-
-		sqlDB, err := db.DB()
-		if err != nil {
-			fmt.Printf("Error during connecting to database: %v\n", err)
-			return nil, err
-		}
-		sqlDB.SetMaxOpenConns(100)
-		sqlDB.SetMaxIdleConns(20)
-		sqlDB.SetConnMaxLifetime(30 * time.Minute)
-
-		DBSession = db
-	case "sqlite":
-		//  this is sqlite connection
-		db, _ := gorm.Open(sqlite.Open(cfg.Get(fmt.Sprintf("%s_SQLLITE_URI", strings.ToUpper(app_name)))), &gorm.Config{
-
-			DisableForeignKeyConstraintWhenMigrating: false,
-			Logger:                                   newLogger,
-			SkipDefaultTransaction:                   true,
-		})
-
-		sqlDB, err := db.DB()
-		if err != nil {
-			fmt.Printf("Error during connecting to database: %v\n", err)
-			return nil, err
-		}
-		sqlDB.SetMaxOpenConns(10)
-		sqlDB.SetConnMaxLifetime(5 * time.Second)
-		DBSession = db
 	case "mysql":
-		db, err := gorm.Open(mysql.New(mysql.Config{
-			DSN:                       cfg.Get(fmt.Sprintf("%s_MYSQL_URI", strings.ToUpper(app_name))), // data source name
-			DefaultStringSize:         256,                                                             // default size for string fields
-			DisableDatetimePrecision:  true,                                                            // disable datetime precision, which not supported before MySQL 5.6
-			DontSupportRenameIndex:    true,                                                            // drop & create when rename index, rename index not supported before MySQL 5.7, MariaDB
-			DontSupportRenameColumn:   true,                                                            //  when rename column, rename column not supported before MySQL 8, MariaDB
-			SkipInitializeWithVersion: false,                                                           // auto configure based on currently MySQL version
-		}), &gorm.Config{
-			DisableForeignKeyConstraintWhenMigrating: false,
-			Logger:                                   newLogger,
-			SkipDefaultTransaction:                   true,
-		})
-		if err != nil {
-			fmt.Printf("Error during connecting to database: %v\n", err)
-			return nil, err
-		}
+		dsn := cfg.Get(fmt.Sprintf("%s_MYSQL_URI", strings.ToUpper(app_name)))
+		sqlDB = sqldblogger.OpenDriver(dsn, &mysql.MySQLDriver{}, adapter)
+		DBSession, err = gorm.Open(gormMysql.New(gormMysql.Config{
+			Conn: sqlDB,
+		}), &gorm.Config{Logger: newLogger, SkipDefaultTransaction: true})
 
-		sqlDB, err := db.DB()
-		if err != nil {
-			fmt.Printf("Error during connecting to database: %v\n", err)
-			return nil, err
-		}
+	case "sqlite":
+		dsn := cfg.Get(fmt.Sprintf("%s_SQLLITE_URI", strings.ToUpper(app_name)))
+		sqlDB = sqldblogger.OpenDriver(dsn, &sqlite3.SQLiteDriver{}, adapter)
+		DBSession, err = gorm.Open(gormSqlite.New(gormSqlite.Config{
+			Conn: sqlDB,
+		}), &gorm.Config{Logger: newLogger, SkipDefaultTransaction: true})
+
+	default:
+		return nil, fmt.Errorf("database type %s not supported", app_env)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply Pool Settings to the wrapped sqlDB
+	if app_env == "sqlite" {
+		sqlDB.SetMaxOpenConns(1)
+		sqlDB.SetConnMaxLifetime(5 * time.Second)
+	} else {
 		sqlDB.SetMaxOpenConns(100)
 		sqlDB.SetMaxIdleConns(20)
 		sqlDB.SetConnMaxLifetime(30 * time.Minute)
-		DBSession = db
-	default:
-		return nil, fmt.Errorf("database type not supported")
-
 	}
 
-	// Mouting Otel tracer plugin on gorm Session
-	err := DBSession.Use(tracing.NewPlugin())
-	if err != nil {
-		fmt.Printf("Error during connecting to otel plugin: %v\n", err)
-
-	}
+	_ = DBSession.Use(tracing.NewPlugin())
 	return DBSession, nil
-
 }
+

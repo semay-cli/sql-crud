@@ -10,6 +10,7 @@ import (
 
 	"{{.ProjectName}}/database"
 	"{{.ProjectName}}/configs"
+	"{{.ProjectName}}/logs"
 	{{- if ne .AuthAppName .AppName }}
 	{{ .AuthAppName | replaceString}}_models "{{.ProjectName}}/{{.AuthAppName}}/models"
 	{{- end}}
@@ -22,9 +23,9 @@ func BoolPtr(b bool) *bool {
     return &b
 }
 
-func InitDatabase(test_flag bool, cfg *configs.EnvConfig) {
+func InitDatabase(test_flag bool, cfg *configs.EnvConfig,logger *logs.Logger) {
 
-	db, err  := database.ReturnSession("{{ .AppName | replaceString }}",cfg)
+	db, err  := database.ReturnSession("{{ .AppName | replaceString }}",cfg,logger)
 	if err != nil {
 		panic(err)
 	}
@@ -49,9 +50,9 @@ func InitDatabase(test_flag bool, cfg *configs.EnvConfig) {
 
 }
 
-func CleanDatabase(test_flag bool,  cfg *configs.EnvConfig) {
+func CleanDatabase(test_flag bool,  cfg *configs.EnvConfig, logger *logs.Logger) {
 
-	db, err := database.ReturnSession("{{ .AppName | replaceString }}",cfg)
+	db, err := database.ReturnSession("{{ .AppName | replaceString }}",cfg,logger)
 	if err == nil {
 		fmt.Println("Connection Opened to Database")
 		fmt.Println("Dropping Models if Exist")
@@ -70,9 +71,9 @@ func CleanDatabase(test_flag bool,  cfg *configs.EnvConfig) {
 }
 
 {{ if eq .AuthAppName .AppName }}
-func CreateSuperUser( cfg *configs.EnvConfig) {
+func CreateSuperUser( cfg *configs.EnvConfig, logger *logs.Logger) {
 
-	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg)
+	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -103,9 +104,9 @@ func CreateSuperUser( cfg *configs.EnvConfig) {
 
 }
 
-func ResourceMigration( cfg *configs.EnvConfig) {
+func ResourceMigration( cfg *configs.EnvConfig, logger *logs.Logger) {
 
-	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg)
+	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 		return
@@ -262,10 +263,10 @@ func ResourceMigration( cfg *configs.EnvConfig) {
 	log.Println("Successfully created apps, groups and scopes")
 }
 {{- else }}
-func ResourceMigration(cfg *configs.EnvConfig) {
+func ResourceMigration(cfg *configs.EnvConfig,logger *logs.Logger) {
 
 
-	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg)
+	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 		return

@@ -1,0 +1,414 @@
+package repository
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+
+	"{{ .ProjectName }}/{{ .AppName }}/models"
+	  "github.com/Masterminds/squirrel"
+	  "database/sql"
+	
+
+)
+
+
+
+
+// ##########################################################
+// ##########  Relationship  Services to {{.FieldName}}
+// ##########################################################
+
+func (s *{{ .AppName | toPascalCase }}Repository) Add{{.ParentName}}To{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string,tx *sql.Tx) error {
+	// Fetching
+	{{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+	if err != nil {
+		return err
+	}
+
+	{{.FieldName | toInitials}}ID, err := strconv.Atoi({{.LowerFieldName}}ID)
+	if err != nil {
+		return err
+	}
+
+	{{- if and (eq $.AppName $.AuthAppName) (eq .FieldName "User") }}
+	user, err := s.GetOneUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch user for cache invalidation: %v", err)
+	}
+	{{- end }}
+
+	{{- if and (eq $.AppName $.AuthAppName) (eq .ParentName "User") }}
+	user, err := s.GetOneUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch user for cache invalidation: %v", err)
+	}
+	{{- end }}
+
+	{{ if .MtM }}
+	// Build Insert
+	qb := squirrel.Insert("{{.TableName}}").
+		Columns("{{.LowerParentName }}_id", "{{.LowerFieldName }}_id").
+		Values({{.ParentName | toInitials }}ID, {{.FieldName | toInitials }}ID)
+
+	if s.DB.Dialector.Name() == "postgres" {
+		qb = qb.PlaceholderFormat(squirrel.Dollar)
+	}
+
+	query, args, err := qb.ToSql()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to add user to group: %v", err)
+		}
+	{{- end}}
+
+
+	{{- if .OtM }}
+		// Build Insert
+	qb := squirrel.Update("{{.LowerFieldName}}s").
+        Set("{{.LowerParentName}}_id", {{.ParentName | toInitials}}ID).
+        Where(squirrel.Eq{"id": {{.FieldName | toInitials}}ID})
+
+	if s.DB.Dialector.Name() == "postgres" {
+		qb = qb.PlaceholderFormat(squirrel.Dollar)
+	}
+
+	query, args, err := qb.ToSql()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+		}
+
+	{{- end}}
+
+
+	// Removing Cache if update success
+	cacheKey_all := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
+	cacheKey_none := "{{.ParentName}}_{{.FieldName}}_none:" + {{.ParentName | toLowerCaseName}}ID
+	s.Cache.Delete(cacheKey_all)
+	s.Cache.Delete(cacheKey_none)
+	// Removing Cache if update success
+    {{- if and (eq $.AppName $.AuthAppName) (eq .ParentName "User") }}
+    email := user.Email
+    s.Cache.Delete("user:login:" + email)
+    {{- end }}
+    {{- if and (eq $.AppName $.AuthAppName) (eq .FieldName "User") }}
+    email := user.Email
+    s.Cache.Delete("user:login:" + email)
+    {{- end }}
+
+
+	return nil
+}
+
+func (s *{{ .AppName | toPascalCase }}Repository) Remove{{ .ParentName}}From{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string, tx *sql.Tx) error {
+	{{- if .MtM }}
+	// Fetching
+	{{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+	if err != nil {
+		return err
+	}
+	{{- end }}
+
+	{{.FieldName | toInitials}}ID, err := strconv.Atoi({{.LowerFieldName}}ID)
+	if err != nil {
+		return err
+	}
+
+	{{- if and (eq $.AppName $.AuthAppName) (eq .FieldName "User") }}
+	user, err := s.GetOneUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch user for cache invalidation: %v", err)
+	}
+	{{- end }}
+	
+	{{- if and (eq $.AppName $.AuthAppName) (eq .ParentName "User") }}
+	user, err := s.GetOneUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch user for cache invalidation: %v", err)
+	}
+	{{- end }}
+
+	{{ if .MtM }}
+	// Build Insert
+	qb := squirrel.Delete("{{.TableName}}").
+		Where(squirrel.Eq{"{{.LowerParentName }}_id": {{.ParentName | toInitials}}ID,"{{.LowerFieldName }}_id": {{.FieldName | toInitials}}ID})
+
+	if s.DB.Dialector.Name() == "postgres" {
+		qb = qb.PlaceholderFormat(squirrel.Dollar)
+	}
+
+	query, args, err := qb.ToSql()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to add user to group: %v", err)
+		}
+	{{- end}}
+
+
+	{{- if .OtM }}
+	// Build Insert
+	qb := squirrel.Update("{{.LowerFieldName}}s").
+        Set("{{.LowerParentName}}_id", nil).
+        Where(squirrel.Eq{"id": {{.FieldName | toInitials}}ID})
+
+	if s.DB.Dialector.Name() == "postgres" {
+		qb = qb.PlaceholderFormat(squirrel.Dollar)
+	}
+
+	query, args, err := qb.ToSql()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+		}
+
+	{{- end}}
+
+
+	// Removing Cache if update sucess
+	cacheKey_all := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
+	cacheKey_none := "{{.ParentName}}_{{.FieldName}}_none:" + {{.ParentName | toLowerCaseName}}ID
+	s.Cache.Delete(cacheKey_all)
+	s.Cache.Delete(cacheKey_none)
+	{{- if and (eq $.AppName $.AuthAppName) (eq .ParentName "User") }}
+    email := user.Email
+    s.Cache.Delete("user:login:" + email)
+    {{- end }}
+    {{- if and (eq .AppName .AuthAppName) (eq .FieldName "User") }}
+    email := user.Email
+    s.Cache.Delete("user:login:" + email)
+    {{- end }}
+
+
+	return nil
+}
+
+
+func (s *{{ .AppName | toPascalCase }}Repository) Get{{.ParentName}}{{.FieldName}}s(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, pagination models.Pagination) ([]models.{{.FieldName}}Get, uint, error) {
+	{{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+	if err != nil {
+		return  nil,0,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
+	}
+	
+
+	{{- if  .MtM }}
+	qb := squirrel.Select("{{.FieldName | toInitials}}.*", "count(*) OVER() as total_count").
+        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
+        Join("{{.TableName }} {{ .TableName | toInitials}} ON {{.FieldName | toInitials}}.id = {{ .TableName | toInitials}}.{{.LowerFieldName}}_id").
+        Where(squirrel.Eq{"{{.TableName | toInitials}}.{{.LowerParentName}}_id": {{.ParentName | toInitials}}ID}).
+        OrderBy("{{.FieldName | toInitials}}.id ASC").
+        Limit(uint64(pagination.Size)).
+        Offset(uint64((pagination.Page - 1) * pagination.Size))	
+	
+	{{- end }}
+	{{- if .OtM}}
+	qb := squirrel.Select("{{.FieldName | toInitials}}.*", "count(*) OVER() as total_count").
+        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
+        Where(squirrel.Eq{"{{.FieldName | toInitials}}.{{.LowerParentName}}_id": {{.ParentName | toInitials}}ID}).
+        OrderBy("{{.FieldName | toInitials}}.id ASC").
+        Limit(uint64(pagination.Size)).
+        Offset(uint64((pagination.Page - 1) * pagination.Size))
+	{{- end}}
+
+	if s.DB.Dialector.Name() == "postgres" {
+        qb = qb.PlaceholderFormat(squirrel.Dollar)
+    }
+
+    query, args, err := qb.ToSql()
+    if err != nil {
+        return nil, 0, err
+    }
+
+    rows, err := s.SQLC.QueryContext(ctx, query, args...)
+    if err != nil {
+        return nil, 0, err
+    }
+    defer rows.Close()
+
+	items := []models.{{.FieldName}}Get{}
+    var totalCount int64
+    for rows.Next() {
+        var item models.{{.FieldName}}
+        err := rows.Scan(
+		  {{- range .ResponseModel.Fields}}{{- if ne .DBType  "None"}} 
+            &item.{{.Name}},
+          {{- end }}{{- end }}
+          &item.UpdatedAt,
+          &item.CreatedAt,
+            &totalCount,
+        )
+        if err != nil {
+            return nil, 0, err
+        }
+    
+        items = append(items, *item.ToGet())
+    }
+
+	return items,uint(totalCount), nil
+}
+// #########################
+// No Pagination Services###
+// #########################
+
+func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string) ([]models.{{.FieldName}}Get, error) {
+	
+
+	 // checking Cache if it exists
+   	cacheKey := "{{.ParentName}}_{{.FieldName}}_all:" + {{.ParentName | toLowerCaseName}}ID
+	if cached{{.FieldName}}, found := s.Cache.Get(cacheKey); found {
+		return cached{{.FieldName}}.([]models.{{.FieldName}}Get), nil
+	}
+
+
+	{{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+	if err != nil {
+		return  nil,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
+	}
+	
+
+	{{- if  .MtM }}
+	qb := squirrel.Select("{{.FieldName | toInitials}}.*").
+        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
+        Join("{{.TableName }} {{ .TableName | toInitials}} ON {{.FieldName | toInitials}}.id = {{ .TableName | toInitials}}.{{.LowerFieldName}}_id").
+        Where(squirrel.Eq{"{{.TableName | toInitials}}.{{.LowerParentName}}_id": {{.ParentName | toInitials}}ID}).
+        OrderBy("{{.FieldName | toInitials}}.id ASC")
+
+	
+	{{- end }}
+	{{- if .OtM}}
+	qb := squirrel.Select("{{.FieldName | toInitials}}.*").
+        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
+        Where(squirrel.Eq{"{{.FieldName | toInitials}}.{{.LowerParentName}}_id": {{.ParentName | toInitials}}ID}).
+        OrderBy("{{.FieldName | toInitials}}.id ASC")
+	{{- end}}
+
+	if s.DB.Dialector.Name() == "postgres" {
+        qb = qb.PlaceholderFormat(squirrel.Dollar)
+    }
+
+    query, args, err := qb.ToSql()
+    if err != nil {
+        return nil, err
+    }
+
+    rows, err := s.SQLC.QueryContext(ctx, query, args...)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+	items := []models.{{.FieldName}}Get{}
+    for rows.Next() {
+        var item models.{{.FieldName}}
+        err := rows.Scan(
+		  {{- range .ResponseModel.Fields}}{{- if ne .DBType  "None"}} 
+            &item.{{.Name}},
+          {{- end }}{{- end }}
+          &item.UpdatedAt,
+          &item.CreatedAt,
+        )
+        if err != nil {
+            return nil, err
+        }
+    
+        items = append(items, *item.ToGet())
+    }
+
+	
+	// Setting Cache before returning the user
+	cache_copy := make([]models.{{.FieldName}}Get,len(items))
+	copy(cache_copy,items)
+    s.Cache.Set(cacheKey, cache_copy)
+
+	return items, nil
+}
+
+
+func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string) ([]models.{{.FieldName}}Get, error) {
+	// checking Cache if it exists
+   	cacheKey := "{{.ParentName}}_{{.FieldName}}_none:" + {{.ParentName | toLowerCaseName}}ID
+	if cached{{.FieldName}}, found := s.Cache.Get(cacheKey); found {
+		return cached{{.FieldName}}.([]models.{{.FieldName}}Get), nil
+	}
+
+	
+	{{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+	if err != nil {
+		return  nil,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
+	}
+		
+
+	{{- if  .MtM }}
+	qb := squirrel.Select("{{.FieldName | toInitials}}.*").
+        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
+        LeftJoin("{{.TableName }} {{ .TableName | toInitials}} ON {{.FieldName | toInitials}}.id = {{ .TableName | toInitials}}.{{.LowerFieldName}}_id AND {{ .TableName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID).
+        Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id IS NULL").
+        OrderBy("{{.FieldName | toInitials}}.id ASC")
+
+	
+	{{- end }}
+	{{- if .OtM}}
+	qb := squirrel.Select("{{.FieldName | toInitials}}.*", ).
+        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
+        Where(squirrel.Or{
+		squirrel.Eq{"{{.FieldName | toInitials}}.{{.LowerParentName}}_id": nil},
+		squirrel.NotEq{"{{.FieldName | toInitials}}.{{.LowerParentName}}_id": {{.ParentName | toInitials}}ID}}).
+        OrderBy("{{.FieldName | toInitials}}.id ASC")
+	{{- end}}
+
+	if s.DB.Dialector.Name() == "postgres" {
+        qb = qb.PlaceholderFormat(squirrel.Dollar)
+    }
+
+    query, args, err := qb.ToSql()
+    if err != nil {
+        return nil, err
+    }
+
+    rows, err := s.SQLC.QueryContext(ctx, query, args...)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+	items := []models.{{.FieldName}}Get{}
+    for rows.Next() {
+        var item models.{{.FieldName}}
+        err := rows.Scan(
+		  {{- range .ResponseModel.Fields}}{{- if ne .DBType  "None"}} 
+            &item.{{.Name}},
+          {{- end }}{{- end }}
+          &item.UpdatedAt,
+          &item.CreatedAt,        
+        )
+        if err != nil {
+            return nil, err
+        }
+    
+        items = append(items, *item.ToGet())
+    }
+
+
+	// Setting Cache before returning the user
+	cache_copy := make([]models.{{.FieldName}}Get,len(items))
+	copy(cache_copy,items)
+    s.Cache.Set(cacheKey, cache_copy)
+
+	return items, nil
+}

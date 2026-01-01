@@ -30,7 +30,7 @@ import (
 // @Param page query int true "page"
 // @Param size query int true "page size"
 {{- range .SearchFields}}
-// @Param {{ . }} query string false "Search by {{ . }} optional field string"
+// @Param {{ . | getBase }} query string false "Search by {{ . | getBase }} optional field string"
 {{- end}}
 // @Success 200 {object} common.ResponsePagination{data=[]models.{{.Name}}Get}
 // @Failure 404 {object} common.ResponseHTTP{}
@@ -69,6 +69,8 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx echo.Co
 		Page:   Page,
 		Size:   Limit,
 	}
+
+	pagination.Validate()
 
 	// Fetch {{.LowerName}}s from service
 	{{.LowerName}}s,totalCount, err := ctrl.Svc.Get{{.Name}}s(tracer.Tracer, pagination, filteredSearchTerm)

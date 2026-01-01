@@ -1,0 +1,24 @@
+package logs
+
+import (
+	"bytes"
+	"encoding/json"
+
+	"go.uber.org/zap/zapcore"
+)
+
+type prettyWriteSyncer struct {
+	ws zapcore.WriteSyncer
+}
+
+func (p prettyWriteSyncer) Write(b []byte) (int, error) {
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, b, "", "  "); err != nil {
+		return p.ws.Write(b) // fallback to original if indent fails
+	}
+	return p.ws.Write(buf.Bytes())
+}
+
+func (p prettyWriteSyncer) Sync() error {
+	return p.ws.Sync()
+}

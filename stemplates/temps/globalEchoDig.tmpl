@@ -220,8 +220,8 @@ func buildContainer() *dig.Container {
 
 	{{ range .AppNames}}
 	// Provide named DBs
-	mustProvide(container.Provide(func(cfg *configs.EnvConfig) (*gorm.DB, error) {
-		return database.ReturnSession("{{ . | replaceString }}", cfg)
+	mustProvide(container.Provide(func(cfg *configs.EnvConfig,logger *logs.Logger) (*gorm.DB, error) {
+		return database.ReturnSession("{{ . | replaceString }}", cfg, logger)
 	}, dig.Name("{{ . | replaceString }}_db")))
 	{{- end }}
 

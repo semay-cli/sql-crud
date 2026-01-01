@@ -1,316 +1,367 @@
 {
     "project_name": "{{.ProjectName}}",
     "app_name": "{{.AppName}}",
-    "models": [
+       "models": [
       {
         "name": "Group",
-        "search_fields": ["name", "description","active"],
+        "search_fields": ["name", "description","active$exact$boolean"],
+        "get_one_fields" : ["name"],
         "rln_model": ["User$mtm$user_groups", "Scope$mtm$group_scopes"],
         "fields": [
           {
             "name": "ID",
             "type": "uint",
             "annotation": "gorm:\"primaryKey;autoIncrement:true\" json:\"id,omitempty\"",
-            "curd_flag": "true$false$false$true$false$false"
+            "curd_flag": "true$false$false$true$false$false",
+            "db_type": "SERIAL PRIMARY KEY"
           },
           {
             "name": "Name",
             "type": "string",
             "annotation": "gorm:\"not null; unique;\" json:\"name,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL UNIQUE"
           },
           {
             "name": "Description",
             "type": "string",
             "annotation": "gorm:\"not null; \" json:\"description,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL"
           },
           {
             "name": "Active",
             "type": "bool",
             "annotation": "gorm:\"default:true; constraint:not null;\" json:\"active\"",
-            "curd_flag": "true$false$true$true$false$false"
+            "curd_flag": "true$false$true$true$false$false",
+            "db_type" : "BOOLEAN NOT NULL DEFAULT TRUE"
           },
           {
             "name": "Users",
             "type": "[]User",
             "annotation": "gorm:\"many2many:user_groups; constraint:OnUpdate:CASCADE; OnDelete:CASCADE;\" json:\"users,omitempty\"",
-            "curd_flag": "false$false$false$false$false$true"
+            "curd_flag": "false$false$false$false$false$true",
+            "db_type": "None"
           },
           {
             "name": "Scopes",
             "type": "[]Scope",
             "annotation": "gorm:\"many2many:group_scopes; constraint:OnUpdate:CASCADE; OnDelete:CASCADE;\" json:\"scopes,omitempty\"",
-            "curd_flag": "false$false$false$false$false$true"
+            "curd_flag": "false$false$false$false$false$true",
+            "db_type": "None"
           },
           {
             "name": "AppID",
             "type": "sql.NullInt64",
             "annotation": "gorm:\"foreignkey:AppID OnDelete:SET NULL\" json:\"app_id,omitempty\" swaggertype:\"number\"",
-            "curd_flag": "false$false$false$false$true$false"
+            "curd_flag": "false$false$false$false$true$false",
+            "db_type": "INTEGER REFERENCES apps(id) ON DELETE SET NULL"
           }
         ]
       },
       {
         "name": "App",
-        "search_fields": ["name", "description","active"],
+        "search_fields": ["name", "description","active$exact$boolean"],
+        "get_one_fields": ["name","uuid"],
         "rln_model": ["Group$otm"],
         "fields": [
           {
             "name": "ID",
             "type": "uint",
             "annotation": "gorm:\"primaryKey;autoIncrement:true\" json:\"id,omitempty\"",
-            "curd_flag": "true$false$false$true$false$false"
+            "curd_flag": "true$false$false$true$false$false",
+            "db_type": "SERIAL PRIMARY KEY"
           },
           {
             "name": "Name",
             "type": "string",
             "annotation": "gorm:\"not null; unique;\" json:\"name,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL UNIQUE"
           },
           {
             "name": "UUID",
             "type": "string",
             "annotation": "gorm:\"not null; unique;\" json:\"uuid,omitempty\"",
-            "curd_flag": "true$false$false$false$true$false"
+            "curd_flag": "true$false$false$false$true$false",
+            "db_type" : "TEXT NOT NULL UNIQUE"
           },
           {
             "name": "RedirectURL",
             "type": "string",
             "annotation": "gorm:\"type:string;\" json:\"redirect_url\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT"
           },
           {
             "name": "SwaggerURL",
             "type": "string",
             "annotation": "gorm:\"constraint:not null; unique; type:string;\" json:\"swagger_url\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL UNIQUE"
           },
           {
             "name": "RedirectON",
             "type": "bool",
             "annotation": "gorm:\"constraint:not null;\" json:\"redirect_on\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "BOOLEAN NOT NULL"
           },
           {
             "name": "Active",
             "type": "bool",
             "annotation": "gorm:\"constraint:not null;\" json:\"active\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "BOOLEAN NOT NULL"
           },
           {
             "name": "Description",
             "type": "string",
             "annotation": "gorm:\"not null; \" json:\"description,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL"
           },
           {
             "name": "Groups",
             "type": "[]Group",
             "annotation": "gorm:\"association_foreignkey:AppID constraint:OnUpdate:SET NULL OnDelete:SET NULL\" json:\"groups,omitempty\"",
-            "curd_flag": "false$false$false$false$true$false"
+            "curd_flag": "false$false$false$false$true$false",
+            "db_type": "None"
           }
         ]
       },
       {
         "name": "User",
-        "search_fields": ["username", "email", "first_name", "last_name","disabled"],
+        "search_fields": ["username", "email", "first_name", "last_name","disabled$exact$boolean"],
+        "get_one_fields": ["username", "email", "uuid"],
         "rln_model": ["Group$mtm$user_groups", "Scope$mtm$user_scopes"],
         "fields": [
           {
             "name": "ID",
             "type": "uint",
             "annotation": "gorm:\"primaryKey;autoIncrement:true\" json:\"id,omitempty\"",
-            "curd_flag": "true$false$false$false$false$false"
+            "curd_flag": "true$false$false$false$false$false",
+            "db_type": "SERIAL PRIMARY KEY"
           },
           {
             "name": "Email",
             "type": "string",
             "annotation": "gorm:\"not null; unique; type:string;\" json:\"email,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type": "TEXT NOT NULL UNIQUE"
           },
           {
             "name": "FirstName",
             "type": "string",
             "annotation": "gorm:\"constraint:not null; type:string;\" json:\"first_name\"",
-            "curd_flag": "true$true$true$false$true$false"
+            "curd_flag": "true$true$true$false$true$false",
+            "db_type": "TEXT NOT NULL"
           },
           {
             "name": "MiddleName",
             "type": "string",
             "annotation": "gorm:\"constraint:not null; type:string;\" json:\"middle_name\"",
-            "curd_flag": "true$true$true$false$true$false"
+            "curd_flag": "true$true$true$false$true$false",
+            "db_type": "TEXT NOT NULL"
           },
           {
             "name": "LastName",
             "type": "string",
             "annotation": "gorm:\"constraint:not null; type:string;\" json:\"last_name\"",
-            "curd_flag": "true$true$true$false$true$false"
+            "curd_flag": "true$true$true$false$true$false",
+            "db_type": "TEXT NOT NULL"
           },
           {
             "name": "Username",
             "type": "string",
             "annotation": "gorm:\"not null; unique;\" json:\"username,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type": "TEXT NOT NULL UNIQUE"
           },
           {
             "name": "Password",
             "type": "string",
             "annotation": "gorm:\"not null;\" json:\"password,omitempty\"",
-            "curd_flag": "false$true$true$true$false$false"
+            "curd_flag": "false$true$true$true$false$false",
+            "db_type": "TEXT NOT NULL"
           },
           {
             "name": "DateRegistred",
             "type": "time.Time",
             "annotation": "gorm:\"constraint:not null; default:current_timestamp;\" json:\"date_registered,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type": "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"
           },
           {
             "name": "LastLogin",
             "type": "time.Time",
             "annotation": "gorm:\"constraint:not null;\" json:\"last_login,omitempty\"",
-            "curd_flag": "true$false$false$false$false$false"
+            "curd_flag": "true$false$false$false$false$false",
+            "db_type": "TIMESTAMP NOT NULL"
           },
           {
             "name": "Disabled",
             "type": "bool",
             "annotation": "gorm:\"default:true; constraint:not null;\" json:\"disabled\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type": "BOOLEAN NOT NULL DEFAULT FALSE"
           },
           {
             "name": "UUID",
             "type": "string",
             "annotation": "gorm:\"constraint:not null; unique; type:string;\" json:\"uuid\"",
-            "curd_flag": "true$false$false$false$true$false"
+            "curd_flag": "true$false$false$false$true$false",
+            "db_type": "TEXT NOT NULL UNIQUE"
           },
           {
             "name": "Groups",
             "type": "[]Group",
             "annotation": "gorm:\"many2many:user_groups; constraint:OnUpdate:CASCADE; OnDelete:CASCADE;\" json:\"groups,omitempty\"",
-            "curd_flag": "false$false$false$false$false$true"
+            "curd_flag": "false$false$false$false$false$true",
+            "db_type": "None"
           },
           {
             "name": "Scopes",
             "type": "[]Scope",
             "annotation": "gorm:\"many2many:user_scopes; constraint:OnUpdate:CASCADE; OnDelete:CASCADE;\" json:\"scopes,omitempty\"",
-            "curd_flag": "false$false$false$false$false$true"
+            "curd_flag": "false$false$false$false$false$true",
+            "db_type": "None"
           }        
         ]
       },
       {
         "name": "Scope",
-        "search_fields": ["name", "description","active"],
+        "search_fields": ["name", "description","active$exact$boolean"],
+        "get_one_fields": ["name"],
         "rln_model": ["Resource$otm", "Group$mtm$group_scopes","User$mtm$user_scopes"],
         "fields": [
           {
             "name": "ID",
             "type": "uint",
             "annotation": "gorm:\"primaryKey;autoIncrement:true\" json:\"id,omitempty\"",
-            "curd_flag": "true$false$false$false$false$false"
+            "curd_flag": "true$false$false$false$false$false",
+            "db_type": "SERIAL PRIMARY KEY"
           },
           {
             "name": "Name",
             "type": "string",
             "annotation": "gorm:\"not null; unique;\" json:\"name,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL UNIQUE"
           },
           {
             "name": "Description",
             "type": "string",
             "annotation": "gorm:\"not null; \" json:\"description,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL"
           },
           {
             "name": "Active",
             "type": "bool",
             "annotation": "gorm:\"default:true; constraint:not null;\" json:\"active\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "BOOLEAN NOT NULL DEFAULT TRUE"
           },
           {
             "name": "Resources",
             "type": "[]Resource",
             "annotation": "gorm:\"association_foreignkey:ScopeID constraint:OnUpdate:SET NULL OnDelete:SET NULL\" json:\"resources,omitempty\"",
-            "curd_flag": "false$false$false$false$true$false"
+            "curd_flag": "false$false$false$false$true$false",
+            "db_type": "None"
           },
           {
             "name": "Groups",
             "type": "[]Group",
             "annotation": "gorm:\"many2many:group_scopes; constraint:OnUpdate:CASCADE; OnDelete:CASCADE;\" json:\"groups,omitempty\"",
-            "curd_flag": "false$false$false$false$false$true"
+            "curd_flag": "false$false$false$false$false$true",
+            "db_type": "None"
           },
           {
             "name": "Users",
             "type": "[]User",
             "annotation": "gorm:\"many2many:user_scopes; constraint:OnUpdate:CASCADE; OnDelete:CASCADE;\" json:\"users,omitempty\"",
-            "curd_flag": "false$false$false$false$false$true"
+            "curd_flag": "false$false$false$false$false$true",
+            "db_type": "None"
           }
         ]
       },
       {
         "name": "Resource",
         "search_fields": ["name", "description","method"],
+        "get_one_fields": ["name"],
         "rln_model": [],
         "fields": [
           {
             "name": "ID",
             "type": "uint",
             "annotation": "gorm:\"primaryKey;autoIncrement:true\" json:\"id,omitempty\"",
-            "curd_flag": "true$false$false$false$false$false"
+            "curd_flag": "true$false$false$false$false$false",
+            "db_type": "SERIAL PRIMARY KEY"
           },
           {
             "name": "Name",
             "type": "string",
             "annotation": "gorm:\"not null; unique;\" json:\"name,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL UNIQUE"
           },
           {
             "name": "RoutePath",
             "type": "string",
             "annotation": "gorm:\"not null;\" json:\"route_path,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL"
           },
           {
             "name": "Method",
             "type": "string",
             "annotation": "gorm:\"not null;\" json:\"method,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL"
           },
           {
             "name": "Description",
             "type": "string",
             "annotation": "gorm:\"not null; \" json:\"description,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL"
           },
           {
             "name": "ScopeID",
             "type": "sql.NullInt64",
             "annotation": "gorm:\"foreignkey:ScopeID OnDelete:SET NULL\" json:\"scope_id,omitempty\" swaggertype:\"number\"",
-            "curd_flag": "false$false$false$false$true$false"
+            "curd_flag": "false$false$false$false$true$false",
+            "db_type" : "INTEGER REFERENCES scopes(id) ON DELETE SET NULL"
           }
         ]
       },
       {
-        "name": "JWTSalt",
+        "name": "JwtSalt",
         "search_fields": [],
+        "get_one_fields": [],
         "rln_model": [],
         "fields": [
           {
             "name": "ID",
             "type": "uint",
             "annotation": "gorm:\"primaryKey;autoIncrement:true\" json:\"id,omitempty\"",
-            "curd_flag": "true$false$false$false$false$false"
+            "curd_flag": "true$false$false$false$false$false",
+            "db_type": "SERIAL PRIMARY KEY"
           },
           {
             "name": "SaltA",
             "type": "string",
             "annotation": "gorm:\"not null; unique;\" json:\"salt_a,omitempty\"",
-            "curd_flag": "true$false$true$true$false$false"
+            "curd_flag": "true$false$true$true$false$false",
+            "db_type" : "TEXT NOT NULL UNIQUE"
           },
           {
             "name": "SaltB",
             "type": "string",
             "annotation": "gorm:\"not null; unique;\" json:\"salt_b,omitempty\"",
-            "curd_flag": "true$true$true$true$false$false"
+            "curd_flag": "true$true$true$true$false$false",
+            "db_type" : "TEXT NOT NULL UNIQUE"
           }
         ]
       }

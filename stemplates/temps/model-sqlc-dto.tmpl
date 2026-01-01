@@ -1,0 +1,47 @@
+package db
+
+import (
+	"{{.ProjectName}}/{{ .CurrentAppName}}/models"
+	)
+{{ range .Models }}
+{{- $model := . }} 
+
+func (m *Get{{.Name}}Row) ToGet() *models.{{.Name}}Get {
+    return &models.{{.Name}}Get{
+        {{- range .Fields}}
+        {{ if .Get}}{{.Name}}: m.{{.Name | toCustomPascalCase }},{{- end}}
+        {{- end}}CreatedAt: m.CreatedAt.Time,
+        UpdatedAt: m.UpdatedAt.Time,
+    }
+}
+
+func (m *List{{.Name}}PaginatedRow) ToGet() *models.{{.Name}}Get {
+    return &models.{{.Name}}Get{
+        {{- range .Fields}}
+        {{ if .Get}}{{.Name}}: m.{{.Name | toCustomPascalCase }},{{- end}}
+        {{- end}}CreatedAt: m.CreatedAt.Time,
+        UpdatedAt: m.UpdatedAt.Time,
+    }
+}
+
+func (m *List{{.Name}}PaginatedFiltersRow) ToGet() *models.{{.Name}}Get {
+    return &models.{{.Name}}Get{
+        {{- range .Fields}}
+        {{ if .Get}}{{.Name}}: m.{{.Name | toCustomPascalCase }},{{- end}}
+        {{- end}}CreatedAt: m.CreatedAt.Time,
+        UpdatedAt: m.UpdatedAt.Time,
+    }
+}
+{{ range .Relations}}
+func (m *List{{.FieldName}}sWith{{.ParentName}}Row) ToGet() *models.{{$model.Name}}Get {
+    return &models.{{$model.Name}}Get{
+        {{- range $model.Fields}}
+        {{ if .Get}}{{$model.Name}}: m.{{$model.Name | toCustomPascalCase }},{{- end}}
+        {{- end}}CreatedAt: m.CreatedAt.Time,
+        UpdatedAt: m.UpdatedAt.Time,
+    }
+}
+
+{{- end }}
+{{- end }}
+

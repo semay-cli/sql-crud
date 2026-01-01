@@ -1,0 +1,130 @@
+{{range .Models}}
+ {{- $model := . }}      
+-- name: Get{{.Name}} :one
+SELECT {{ .LowerName | toInitials}}.* FROM {{.LowerName}}s {{ .LowerName | toInitials}}
+WHERE id = $1 LIMIT 1;
+{{ if gt (len .GetOneFields) 0 }}
+{{ range $i, $field := .GetOneFields }}
+  -- name: Get{{ $model.Name}}By{{ $field | getBase | toPascalCase }} :one
+  -- return type: {{ $model.Name}}Get
+SELECT {{ $model.LowerName | toInitials}}.* FROM {{$model.LowerName}}s {{ $model.LowerName | toInitials}}
+WHERE {{ $field | getBase }} = $1 LIMIT 1;
+{{ end }}{{- end }}
+
+-- name: List{{.Name}}Paginated :many
+SELECT {{.Name | toInitials }}.*, count(*) OVER() as total_count 
+FROM {{.LowerName}}s {{ .Name | toInitials }}
+ORDER BY id DESC
+LIMIT $1 OFFSET $2;
+{{ if gt (len .SearchFields) 0 }}
+-- name: List{{.Name}}PaginatedFilters :many
+SELECT {{.Name | toInitials }}.*, count(*) OVER() as total_count 
+FROM {{.LowerName}}s {{ .Name | toInitials }}
+WHERE 
+{{- $len := len .SearchFields -}}
+{{- range $i, $field := .SearchFields }}
+  {{ if $field | isValid }}(sqlc.narg('{{ $field | getBase }}') IS NULL OR {{ $model.LowerName | toInitials}}.{{ $field | getBase }} ILIKE '%' || sqlc.narg('{{ $field | getBase }}') || '%'){{- else }}(sqlc.narg('{{ $field | getBase }}') IS NULL OR {{ $model.LowerName | toInitials}}.{{ $field | getBase }} = sqlc.narg('{{ $field | getBase }}')){{- end }} {{- if lt (add $i 1) $len }} AND{{ end }}
+{{- end }}
+ORDER BY id DESC
+LIMIT $1 OFFSET $2;
+{{- end }}
+
+-- name: Create{{.Name}} :one
+INSERT INTO {{.LowerName}}s (
+{{- $count := 0 -}}
+{{- range $i, $f := .Fields -}}
+  {{- if .Post -}}
+    {{- if gt $count 0}}, {{ end -}}
+    {{ $f.Name | toSnakeCase }}
+    {{- $count = add $count 1 -}}
+  {{- end -}}
+{{- end -}}
+) 
+VALUES (
+{{- $param := 1 -}}
+{{- range $i, $f := .Fields -}}
+  {{- if .Post -}}
+    {{- if gt $param 1}}, {{ end -}}
+    ${{ $param }}
+    {{- $param = add $param 1 -}}
+  {{- end -}}
+{{- end -}}
+)
+RETURNING *;
+
+-- name: Update{{.Name}} :one
+UPDATE {{.LowerName}}s 
+SET {{/* space after SET is required */}}
+ {{- $param := 1 -}}
+{{- $count := 0 -}}
+{{- range $i, $f := .Fields -}}
+  {{- if .Patch -}}
+    {{- if gt $count 0}}, {{ end -}}
+    {{ $f.Name | toSnakeCase }} = ${{ $param }}
+    {{- $param = add $param 1 -}}
+    {{- $count = add $count 1 -}}
+  {{- end -}}
+{{- end -}},
+updated_at = CURRENT_TIMESTAMP
+WHERE id = ${{ $param }}
+RETURNING *;
+
+-- name: Update{{.Name}}Partial :one
+UPDATE {{.LowerName}}s 
+SET {{/* space after SET is required */}}
+ {{- $param := 1 -}}
+{{- $count := 0 -}}
+{{- range $i, $f := .Fields -}}
+  {{- if .Patch -}}
+    {{- if gt $count 0}}, {{ end -}}
+    {{ $f.Name | toSnakeCase }} = COALESCE(${{ $param }},{{ $f.Name | toSnakeCase }})
+    {{- $param = add $param 1 -}}
+    {{- $count = add $count 1 -}}
+  {{- end -}}
+{{- end -}},
+updated_at = CURRENT_TIMESTAMP
+WHERE id = ${{ $param }}
+RETURNING *;
+
+-- name: Delete{{.Name}} :exec
+DELETE FROM {{.LowerName}}s WHERE id = $1;
+
+{{ range .Relations}}
+{{- if .MtM }}
+-- Relationship Queries
+-- name: Add{{.FieldName}}To{{.ParentName}} :exec
+INSERT INTO {{.TableName}} ({{.LowerParentName}}_id, {{.LowerFieldName}}_id)
+VALUES ($1, $2);
+
+-- name: Remove{{.FieldName}}From{{.ParentName}} :exec
+DELETE FROM {{.TableName}}
+WHERE {{.LowerParentName}}_id = $1 AND {{.LowerFieldName}}_id = $2;
+
+-- name: List{{.FieldName}}sWith{{.ParentName}} :many
+SELECT {{ .LowerFieldName | toInitials }}.*,COUNT(*) OVER() as total_count  FROM {{.LowerFieldName}}s {{ .LowerFieldName | toInitials }} 
+JOIN {{.TableName}} {{.TableName | toInitials }} ON {{ .LowerFieldName | toInitials }}.id = {{.TableName | toInitials }}.{{.LowerFieldName}}_id
+WHERE {{.LowerParentName}}_id = $1
+ORDER BY id DESC
+LIMIT $2 OFFSET $3;
+
+{{- end}}
+{{- if .OtM}}
+-- name: Add{{.FieldName}}To{{.ParentName}} :exec
+UPDATE {{.LowerFieldName}}s 
+SET {{.LowerParentName}}_id = $1
+ WHERE id=$1 RETURNING *;
+
+-- name: Remove{{.FieldName}}From{{.ParentName}} :exec
+UPDATE {{.LowerFieldName}}s 
+SET {{.LowerParentName}}_id = NULL
+WHERE id=$1 RETURNING *;
+
+-- name: List{{.FieldName}}sWith{{.ParentName}} :many
+SELECT {{ .LowerFieldName | toInitials }}.*,COUNT(*) OVER() as total_count  FROM {{.LowerFieldName}}s {{ .LowerFieldName | toInitials }} 
+WHERE {{.LowerParentName}}_id = $1
+ORDER BY id DESC
+LIMIT $2 OFFSET $3;
+
+{{- end}}
+{{ end}}
+{{- end}}

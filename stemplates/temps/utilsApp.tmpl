@@ -60,7 +60,7 @@ func (repo *{{ .AuthAppName | toPascalCase }}Repository) CreateJWTToken(user mod
 		UserID:           int(user.ID),
 	}
 
-	salt_a, _ := repo.GetJWTSalt()
+	salt_a, _ := repo.GetJwtSalt()
 	exp := time.Now().UTC().Add(time.Duration(duration) * time.Minute)
 	my_claim.ExpiresAt = jwt.NewNumericDate(exp)
 	my_claim.Issuer = "Blue Admin"
@@ -75,7 +75,7 @@ func (repo *{{ .AuthAppName | toPascalCase }}Repository) CreateJWTToken(user mod
 }
 
 func (repo *{{ .AuthAppName | toPascalCase }}Repository) ParseJWTToken(jwtToken string) (UserClaim, error) {
-	salt_a, salt_b := repo.GetJWTSalt()
+	salt_a, salt_b := repo.GetJwtSalt()
 	response_a := UserClaim{}
 	response_b := UserClaim{}
 
@@ -158,7 +158,7 @@ func StructToMap(input any) (map[string]any, error) {
 }
 
 
-func generateULID10() string {
+func GenerateULID10() string {
 	t := time.Now().UTC()
 	entropy := ulid.Monotonic(rand.New(rand.NewSource(t.UnixNano())), 0)
 
@@ -170,7 +170,7 @@ func generateULID10() string {
 
 
 // generateSnowflake10 generates a Snowflake-based ID like "ATT-XXXXXXXXXX"
-func generateSnowflake10(node *snowflake.Node) string {
+func GenerateSnowflake10(node *snowflake.Node) string {
 	id := node.Generate().Base32() // Base32 encoding, uppercase
 	if len(id) > 10 {
 		id = id[:10] // truncate to 10 chars

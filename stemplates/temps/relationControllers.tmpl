@@ -137,6 +137,8 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.Pare
 		Size:   Limit,
 	}
 
+	// validate pagination
+	pagination.Validate()
 
     // Fetch {{.LowerParentName}}s from service
 	{{.LowerFieldName}}s,totalCount, err := ctrl.Svc.Get{{.ParentName}}{{.FieldName}}s(tracer.Tracer,{{.LowerParentName}}_id ,pagination)

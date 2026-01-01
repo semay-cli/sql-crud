@@ -26,6 +26,7 @@ func runModelsCommand(cmd *cobra.Command, args []string) {
 
 	modelsType, _ := cmd.Flags().GetString("type")
 	appName, _ := cmd.Flags().GetString("app")
+	ormStatus, _ := cmd.Flags().GetBool("orm")
 
 	if appName == "" {
 		fmt.Println("Error: --app flag is required.")
@@ -39,10 +40,13 @@ func runModelsCommand(cmd *cobra.Command, args []string) {
 	}
 
 	// Generate models and migrations
-	if modelsType == "init" {
-		generate.GenerateModels(stemplates.RenderData)
+	if ormStatus {
+		generate.GenerateModelsSQLc(stemplates.RenderData)
 	} else {
 		generate.GenerateModels(stemplates.RenderData)
+	}
+
+	if modelsType == "init" {
 		stemplates.CommonCMD()
 	}
 }
@@ -69,6 +73,7 @@ func init() {
 	modelscli.Flags().StringP("type", "t", "", "Rerender the migration function by setting type to \"init\"")
 	modelscli.Flags().StringP("app", "a", "", "Set app name, e.g., \"blue-auth\"")
 	modelscli.Flags().BoolP("auth", "p", false, "Tell if generating models for auth app true or false")
+	modelscli.Flags().BoolP("orm", "o", false, "using gorm and squirrell query builder, defaults false for gorm , true for squirrell")
 
 	// Register commands to the root (goFrame)
 

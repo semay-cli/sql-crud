@@ -27,39 +27,61 @@ type Field map[string]any
 /* ===================== */
 
 func NewZapLogger() *Logger {
-    atomicLevel := zap.NewAtomicLevelAt(zap.InfoLevel)
+	// Debug level for SQL logs
+	atomicLevel := zap.NewAtomicLevelAt(zap.DebugLevel)
 
-    encoderCfg := zap.NewProductionEncoderConfig()
-    encoder := zapcore.NewJSONEncoder(encoderCfg)
+	// Pretty / human-readable JSON encoder
+	encoderCfg := zap.NewDevelopmentEncoderConfig()
+	encoderCfg.TimeKey = "ts"
+	encoderCfg.LevelKey = "level"
+	encoderCfg.CallerKey = "caller"
+	encoderCfg.MessageKey = "msg"
+	encoderCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderCfg.EncodeCaller = zapcore.ShortCallerEncoder
 
-    // Open files
-    infoFile, _ := os.OpenFile("server.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-    errorFile, _ := os.OpenFile("server-error.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	// Use JSON encoder for pretty printing
+	encoder := zapcore.NewJSONEncoder(encoderCfg)
 
-    // Level filters
-    highPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-        return lvl >= zap.ErrorLevel
-    })
-    lowPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-        return lvl < zap.ErrorLevel
-    })
+	// Open files
+	infoFile, _ := os.OpenFile("server.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	errorFile, _ := os.OpenFile("server-error.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 
-    // Combine cores
-    core := zapcore.NewTee(
-        zapcore.NewCore(encoder, zapcore.AddSync(infoFile), lowPriority),
-        zapcore.NewCore(encoder, zapcore.AddSync(errorFile), highPriority),
-    )
+	// Info + debug logs
+	// infoCore := zapcore.NewCore(encoder, zapcore.AddSync(infoFile), atomicLevel)
 
-    l := zap.New(core)
 
-    return &Logger{
-        logger: l,
-        sugar:  l.Sugar(),
-        level:  atomicLevel,
-        output: os.Stdout,
-    }
+	// Error logs
+	//errorCore := zapcore.NewCore(encoder, zapcore.AddSync(errorFile), zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+	//		return lvl >= zap.ErrorLevel
+	//}))
+
+	// for pretty print info
+	infoWS := prettyWriteSyncer{zapcore.AddSync(infoFile)}
+	infoCore := zapcore.NewCore(encoder, infoWS, atomicLevel)
+	
+	// for pretty print error
+	errorWs := prettyWriteSyncer{zapcore.AddSync(errorFile)}
+	// Error logs
+	errorCore := zapcore.NewCore(encoder, errorWs, zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl >= zap.ErrorLevel
+	}))
+
+	core := zapcore.NewTee(infoCore, errorCore)
+
+	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+
+	return &Logger{
+		logger: logger,
+		sugar:  logger.Sugar(),
+		level:  atomicLevel,
+		output: os.Stdout,
+	}
 }
 
+func (l *Logger) GetZapLogger() *zap.Logger {
+	return l.logger
+}
 
 // =====================
 // Optional "w" style for structured key/value logging

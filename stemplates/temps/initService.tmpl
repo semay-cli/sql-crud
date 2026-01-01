@@ -2,10 +2,12 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"regexp"
 	"{{ .ProjectName }}/cache"
 	"{{ .ProjectName }}/configs"
 	"{{ .ProjectName }}/{{ .AppName }}/repository"
+	db "{{ .ProjectName }}/{{ .AppName }}/sqlc"
 	"gorm.io/gorm"
 )
 
@@ -13,8 +15,10 @@ import (
 
 // AppDatabase Service wraps Dababase service(SQL)
 type {{ .AppName | toPascalCase }}Service struct {
+    SQLC  *sql.DB
 	DB *gorm.DB
 	Cache *cache.CacheService
+    Queries *db.Queries
 	Cfg   *configs.EnvConfig
 	Repo *repository.{{ .AppName | toPascalCase }}Repository
 	ForeignRegex *regexp.Regexp
@@ -24,10 +28,14 @@ type {{ .AppName | toPascalCase }}Service struct {
 
 
 func InitService(client *gorm.DB, cacheService *cache.CacheService, cfg *configs.EnvConfig, repo *repository.{{ .AppName | toPascalCase }}Repository) *{{ .AppName | toPascalCase }}Service {
+    sqlDB, _ := client.DB() // Extract standard sql.DB from GORM
+	queries := db.New(sqlDB)
 
 	return &{{ .AppName | toPascalCase }}Service{
+        SQLC:  sqlDB,
 		DB:    client,
 		Cache: cacheService,
+        Queries: queries,
 		Cfg:   cfg,
 		Repo:  repo,
         ForeignRegex: regexp.MustCompile(`(?i)_id$`), // Prepare regex to check for *_id pattern
@@ -60,4 +68,32 @@ func (s *{{ .AppName | toPascalCase }}Service ) withTransaction(ctx context.Cont
 
     // Commit if no errors
     return tx.Commit().Error
+}
+
+
+// Utility function for running queries within a transaction
+func (s *{{ .AppName | toPascalCase }}Service) WithSqlcTransaction(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	// Start a new transaction
+	tx, err := s.SQLC.BeginTx(ctx, nil)
+	if err != nil {
+		return err // Return error if transaction can't be started
+	}
+
+	// Ensure rollback on panic
+	defer func() {
+		if r := recover(); r != nil {
+			// Rollback on panic
+			tx.Rollback()
+		}
+	}()
+
+	// Pass the transaction into the function and execute it
+	if err := fn(tx); err != nil {
+		// Rollback if the function returns an error
+		tx.Rollback()
+		return err
+	}
+
+	// Commit the transaction if no errors occurred
+	return tx.Commit()
 }

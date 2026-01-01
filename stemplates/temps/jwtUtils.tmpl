@@ -35,10 +35,10 @@ func (repo *{{ .CurrentAppName | toPascalCase }}Repository) JWTSaltUpdate() {
 	salt_a, _ := GenerateRandomString(salt_length)
 
 	//  defining jwt _object to work with
-	var jwt_object models.JWTSalt
+	var jwt_object models.JwtSalt
 
 	// Fethching the JWT object if it exists
-	repo.DB.Model(&models.JWTSalt{}).Where("id = ?", 1).First(&jwt_object)
+	repo.DB.Model(&models.JwtSalt{}).Where("id = ?", 1).First(&jwt_object)
 
 	// If it exists updating or creating if it does not exist
 	if jwt_object.ID == 1 {
@@ -77,17 +77,17 @@ func (repo *{{ .CurrentAppName | toPascalCase }}Repository) JWTSaltUpdate() {
 
 }
 
-func (repo *{{ .CurrentAppName | toPascalCase }}Repository) GetJWTSalt() (salt_a string, salt_b string) {
+func (repo *{{ .CurrentAppName | toPascalCase }}Repository) GetJwtSalt() (salt_a string, salt_b string) {
 
 	// checking Cache if it exists
 	cacheKey := "blue_admin_salt:1"
-	if cachedJWTSalt, found := repo.Cache.Get(cacheKey); found {
-		return cachedJWTSalt.(*models.JWTSaltGet).SaltA, cachedJWTSalt.(*models.JWTSaltGet).SaltB
+	if cachedJwtSalt, found := repo.Cache.Get(cacheKey); found {
+		return cachedJwtSalt.(*models.JwtSaltGet).SaltA, cachedJwtSalt.(*models.JwtSaltGet).SaltB
 	}
 
-	var jwt_object models.JWTSalt
+	var jwt_object models.JwtSalt
 	// Fethching the JWT object if it exists
-	repo.DB.Model(&models.JWTSalt{}).Where("id = ?", 1).First(&jwt_object)
+	repo.DB.Model(&models.JwtSalt{}).Where("id = ?", 1).First(&jwt_object)
 
 	// check cache
 
@@ -98,7 +98,7 @@ func (repo *{{ .CurrentAppName | toPascalCase }}Repository) GetJWTSalt() (salt_a
 	}
 
 	// Setting Cache before returning the user
-	repo.Cache.Set(cacheKey, &models.JWTSaltGet{SaltA: jwt_object.SaltA, SaltB: jwt_object.SaltB})
+	repo.Cache.Set(cacheKey, &models.JwtSaltGet{SaltA: jwt_object.SaltA, SaltB: jwt_object.SaltB})
 
 	return salt_a, salt_b
 

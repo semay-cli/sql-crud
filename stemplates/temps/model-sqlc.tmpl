@@ -1,0 +1,87 @@
+package models
+
+import (
+	"time"
+
+	{{- $break_7 := false }}
+	{{- range .Fields }}
+	{{- if eq .Type "sql.NullInt64" }}
+	{{- $break_7 = true }}
+	{{- end }}
+	{{- end }}
+
+	{{- if $break_7  }}
+	"database/sql"
+	{{- end }}
+
+)
+
+// {{.Name}} Database model info
+// @Description {{.Name}} type information
+type {{.Name}} struct {
+    {{- range .Fields}} {{if .ForeignKeyModel }} {{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
+     {{ .ForeignKeyModel }} *{{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else }}  {{.Name}} {{if or (eq .Type "bool") (eq .Type "time.Time") }}*{{- end}}{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}}
+	{{end}}
+	CreatedAt *time.Time {{.BackTick}}bson:"created_at,omitempty"{{.BackTick}}
+    UpdatedAt *time.Time {{.BackTick}}bson:"updated_at,omitempty"{{.BackTick}}
+}
+
+{{ if .TableName }}
+func (m *{{.Name}}) TableName() string {
+    return "{{.TableName}}"
+}
+{{- end }}
+
+func (m *{{.Name}}) ToGet() *{{.Name}}Get {
+    return &{{.Name}}Get{
+        {{- range .Fields}}
+        {{if .Get}}{{.Name}}: m.{{.Name}},{{- end}}
+        {{- end}}
+        CreatedAt: m.CreatedAt,
+        UpdatedAt: m.UpdatedAt,
+    }
+}
+
+{{- $hasUUID := false }}
+{{- range .Fields}}
+    {{- if eq .Name "UUID" }}
+        {{- $hasUUID = true }}
+    {{- end }}
+{{- end }}
+
+{{- $hasPassword := false }}
+{{- range .Fields}}
+    {{- if eq .Name "Password" }}
+        {{- $hasPassword = true }}
+    {{- end }}
+{{- end }}
+
+
+// {{.Name}}Post model info
+// @Description {{.Name}}Post type information
+type {{.Name}}Post struct {
+  	{{- range .Fields}}{{- if .Post}} {{if .ForeignKeyModel }} {{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
+     {{ .ForeignKeyModel }} *{{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else }}  {{.Name}} {{ if or (eq .Type "bool") (eq .Type "time.Time") }}*{{- end}}{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}}{{- end}}
+{{end}}}
+
+// {{.Name}}Get model info
+// @Description {{.Name}}Get type information
+type {{.Name}}Get struct {
+	{{- range .Fields}} {{- if .Get}}{{if .ForeignKeyModel }} {{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
+     {{ .ForeignKeyModel }} *{{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else }}  {{.Name}} {{ if or (eq .Type "bool") (eq .Type "time.Time") }}*{{- end}}{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}} {{- end}}
+	{{end}}
+	CreatedAt *time.Time {{.BackTick}}bson:"created_at,omitempty"{{.BackTick}}
+	UpdatedAt *time.Time {{.BackTick}}bson:"updated_at,omitempty"{{.BackTick}}
+}
+
+// {{.Name}}Put model info
+// @Description {{.Name}}Put type information
+type {{.Name}}Put struct {
+	{{range .Fields}} {{- if .Put}} {{.Name}} *{{.Type}}  {{.BackTick}}{{.Annotation}} required:"false"{{.BackTick}}{{- end}}
+{{end}}}
+
+// {{.Name}}Patch model info
+// @Description {{.Name}}Patch type information
+type {{.Name}}Patch struct {
+	{{range .Fields}}{{- if .Patch}}{{.Name}} *{{.Type}}  {{.BackTick}}{{.Annotation}} required:"false"{{.BackTick}}{{- end}}
+{{end}}}

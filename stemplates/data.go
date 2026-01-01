@@ -93,6 +93,7 @@ type Model struct {
 	AppName      string         `json:"app_name"`
 	AuthAppName  string         `json:"auth_app_name"`
 	SearchFields []string       `json:"search_fields"`
+	GetOneFields []string       `json:"get_one_fields"`
 	Relations    []Relationship `json:"relations"`
 	AuthAppType  string         `json:"auth_app_type"`
 	TableName    string         `json:"table_name"`
@@ -114,12 +115,14 @@ type Relationship struct {
 	MtO             bool    `json:"mto"`
 	BackTick        string  `json:"back_tick"`
 	ProjectName     string  `json:"project_name"`
+	ResponseModel   Model   `json:"response_model"`
 }
 
 // Field represents a model field.
 type Field struct {
 	NormalModelName  string `json:"normal_model_name"`
 	ForeignKeyModel  string `json:"foreign_key_model"`
+	DBType           string `json:"db_type"`
 	ModelName        string `json:"model_name"`
 	Name             string `json:"name"`
 	LowerName        string `json:"lower_name"`
