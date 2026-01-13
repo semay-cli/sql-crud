@@ -1,22 +1,42 @@
 package common
 
+import "sync"
+
+var (
+	responseHTTPPool = sync.Pool{
+		New: func() any {
+			return &ResponseHTTP{}
+		},
+	}
+
+	responsePaginationPool = sync.Pool{
+		New: func() any {
+			return &ResponsePagination{}
+		},
+	}
+
+	searchMapPool = sync.Pool{
+		New: func() any {
+			return make(map[string]any)
+		},
+	}
+)
 
 type ResponseHTTP struct {
-	Success bool        {{.BackTick}}json:"success"{{.BackTick}}
-	Data    interface{} {{.BackTick}}json:"data"{{.BackTick}}
-	Message string      {{.BackTick}}json:"details"{{.BackTick}}
+	Success bool        `json:"success"`
+	Data    interface{} `json:"data"`
+	Message string      `json:"details"`
 }
 
 type ResponsePagination struct {
-	Success bool        {{.BackTick}}json:"success"{{.BackTick}}
-	Items   interface{} {{.BackTick}}json:"data"{{.BackTick}}
-	Message string      {{.BackTick}}json:"details"{{.BackTick}}
-	Total   uint        {{.BackTick}}json:"total"{{.BackTick}}
-	Page    uint        {{.BackTick}}json:"page"{{.BackTick}}
-	Size    uint        {{.BackTick}}json:"size"{{.BackTick}}
-	Pages   uint        {{.BackTick}}json:"pages"{{.BackTick}}
+	Success bool        `json:"success"`
+	Items   interface{} `json:"data"`
+	Message string      `json:"details"`
+	Total   uint        `json:"total"`
+	Page    uint        `json:"page"`
+	Size    uint        `json:"size"`
+	Pages   uint        `json:"pages"`
 }
-
 
 // Generic function to filter the map based on a list of allowed keys.
 func FilterMapByKeys(input map[string]any, allowedKeys []string) map[string]any {
@@ -31,6 +51,19 @@ func FilterMapByKeys(input map[string]any, allowedKeys []string) map[string]any 
 	return filtered
 }
 
+func FilterMapInPlace(input map[string]any, allowedKeys []string) {
+    allowed := make(map[string]bool, len(allowedKeys))
+    for _, k := range allowedKeys {
+        allowed[k] = true
+    }
+    
+    // Remove keys that are not in the allowed list
+    for k := range input {
+        if !allowed[k] {
+            delete(input, k)
+        }
+    }
+}
 
 // Generic function to filter the map based on a list of allowed keys.
 func FilterSearchTerms(input map[string]any, allowedKeys []string) []string {
@@ -44,3 +77,47 @@ func FilterSearchTerms(input map[string]any, allowedKeys []string) []string {
 
 	return filtered
 }
+
+// GetResponseHTTP gets a ResponseHTTP from the pool.
+func GetResponseHTTP() *ResponseHTTP {
+	return responseHTTPPool.Get().(*ResponseHTTP)
+}
+
+// PutResponseHTTP resets and returns a ResponseHTTP to the pool.
+func PutResponseHTTP(r *ResponseHTTP) {
+	r.Success = false
+	r.Data = nil
+	r.Message = ""
+	responseHTTPPool.Put(r)
+}
+
+// GetResponsePagination gets a ResponsePagination from the pool.
+func GetResponsePagination() *ResponsePagination {
+	return responsePaginationPool.Get().(*ResponsePagination)
+}
+
+// PutResponsePagination resets and returns a ResponsePagination to the pool.
+func PutResponsePagination(r *ResponsePagination) {
+	r.Success = false
+	r.Items = nil
+	r.Message = ""
+	r.Total = 0
+	r.Page = 0
+	r.Size = 0
+	r.Pages = 0
+	responsePaginationPool.Put(r)
+}
+
+// GetSearchMap gets a map[string]any from the pool.
+func GetSearchMap() map[string]any {
+	return searchMapPool.Get().(map[string]any)
+}
+
+// PutSearchMap clears and returns a map[string]any to the pool.
+func PutSearchMap(m map[string]any) {
+	for k := range m {
+		delete(m, k)
+	}
+	searchMapPool.Put(m)
+}
+

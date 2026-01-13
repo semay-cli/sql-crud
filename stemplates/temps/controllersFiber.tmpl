@@ -1,0 +1,328 @@
+
+package controllers
+
+import (
+	{{- $break_math := false }}
+	{{- range .Relations }}
+	{{- if .MtM}}
+	{{- $break_math = true }}
+	{{- end}}
+	{{- end}}
+	{{- if $break_math }}
+
+	{{ end }}
+	"strconv"
+	"github.com/gofiber/fiber/v3"
+	"{{.ProjectName}}/common"
+	"{{.ProjectName}}/{{.AppName}}/models"
+	// "{{.ProjectName}}/observe"
+)
+
+
+
+
+// Get{{.Name}}s function to get a {{.Name}}s with pagination and searchFields
+// @Summary Get {{.Name}}s
+// @Description Get {{.Name}}s
+// @Tags {{.Name}}s
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Security Refresh
+// @Param page query int true "page"
+// @Param size query int true "page size"
+{{- range .SearchFields}}
+// @Param {{ . | getBase }} query string false "Search by {{ . | getBase }} optional field string"
+{{- end}}
+// @Success 200 {object} common.ResponsePagination{data=[]models.{{.Name}}Get}
+// @Failure 404 {object} common.ResponseHTTP{}
+// @Router /{{.AppName | replaceString}}/{{.LowerName}} [get]
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx fiber.Ctx) error {
+	
+
+	
+    //  parsing Query Prameters
+	Page, _ := strconv.Atoi(contx.Query("page"))
+	Limit, _ := strconv.Atoi(contx.Query("size"))
+
+	// initalize resp
+	resp_err := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp_err)
+
+	//  checking if query parameters  are correct
+	if Page == 0 || Limit == 0 {
+		resp_err.Message = "Not allowed Params"
+		resp_err.Success = false
+		resp_err.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp_err)
+	}
+
+	
+	// Getting search fields
+	searchTerm := common.GetSearchMap()
+	defer common.PutSearchMap(searchTerm)
+	
+	if err := contx.Bind().Query(searchTerm); err != nil {
+		resp_err.Message = err.Error()
+		resp_err.Success = false
+		resp_err.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp_err)
+	}
+
+	searchFields := []string{ {{.SearchFields | formatSliceToString}} }
+	common.FilterMapInPlace(searchTerm, searchFields)
+
+	// Prepare pagination model
+	pagination := models.Pagination{
+		Page:   Page,
+		Size:   Limit,
+	}
+
+	pagination.Validate()
+
+	// 2. Ensure it goes back to the pool at the end of the request
+	itemsPtr := models.{{.Name}}sPool.Get()
+	defer models.{{.Name}}sPool.Put(itemsPtr)
+
+
+	// Fetch {{.LowerName}}s from service
+	totalCount, err := ctrl.Svc.Get{{.Name}}s(contx.Context(), pagination, searchTerm,itemsPtr)
+	if err != nil {
+		resp_err.Message = err.Error()
+		resp_err.Success = false
+		resp_err.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp_err)
+	}
+
+	// Send paginated response
+	resp := common.GetResponsePagination()
+	defer common.PutResponsePagination(resp)
+	resp.Success = true
+	resp.Message = "Success."
+	resp.Items = *itemsPtr
+	resp.Total = totalCount
+	resp.Page = uint(Page)
+	resp.Size = uint(Limit)
+
+	return common.SendJSON(contx,fiber.StatusOK,resp)
+
+}
+
+
+
+// Get{{.Name}}ByID is a function to get a {{.Name}}s by ID
+// @Summary Get {{.Name}} by ID
+// @Description Get {{.LowerName}} by ID
+// @Tags {{.Name}}s
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param {{.LowerName}}_id path string true "{{.Name}} ID"
+// @Success 200 {object} common.ResponseHTTP{data=models.{{.Name}}Get}
+// @Failure 404 {object} common.ResponseHTTP{}
+// @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [get]
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}ByID(contx fiber.Ctx) error {
+	
+
+   	//  parsing Query Prameters
+	id := contx.Params("{{.LowerName}}_id")
+
+
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
+
+	var item models.{{.Name}}
+
+    // Fetch {{.LowerName}} from service
+	err := ctrl.Svc.GetOne{{.Name}}(contx.Context(), id,&item)
+	if err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+	// 2. Borrow the single UserGet item for the JSON data
+	poolItem := models.{{.Name}}GetItemPool.Get()
+	defer models.{{.Name}}GetItemPool.Put(poolItem)
+	
+	// 5. Copy from Stack -> Pooled Item
+	item.CopyTo(poolItem)
+	
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = poolItem
+	return common.SendJSON(contx,fiber.StatusOK, resp)
+
+}
+
+// Add {{.Name}} to data
+// @Summary Add a new {{.Name}}
+// @Description Add {{.Name}}
+// @Tags {{.Name}}s
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param {{.LowerName}} body models.{{.Name}}Post true "Add {{.Name}}"
+// @Success 200 {object} common.ResponseHTTP{data=models.{{.Name}}Post}
+// @Failure 400 {object} common.ResponseHTTP{}
+// @Failure 500 {object} common.ResponseHTTP{}
+// @Router /{{.AppName | replaceString}}/{{.LowerName}} [post]
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx fiber.Ctx) error {
+	
+
+	// Borrow request model from pool
+    posted_{{.LowerName}} := models.{{.Name}}PostItemPool.Get()
+    defer models.{{.Name}}PostItemPool.Put(posted_{{.LowerName}})
+    posted_{{.LowerName}}.Reset() // Clear previous data
+
+
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
+
+	//first parse request data
+	if err := contx.Bind().Body(posted_{{.LowerName}}); err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+	// then validate structure
+	if err := ctrl.Validator.Struct(posted_{{.LowerName}}); err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+	// 2. Borrow the single UserGet item for the JSON data
+	poolItem := models.{{.Name}}Pool.Get()
+	defer models.{{.Name}}Pool.Put(poolItem)
+
+
+    // post {{.LowerName}} from service
+	err := ctrl.Svc.Create{{.Name}}(contx.Context(), posted_{{.LowerName}},poolItem)
+	if err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+	
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = poolItem
+	return common.SendJSON(contx,fiber.StatusOK, resp)
+}
+
+// Patch {{.Name}} to data
+// @Summary Patch {{.Name}}
+// @Description Patch {{.Name}}
+// @Tags {{.Name}}s
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param {{.LowerName}} body models.{{.Name}}Patch true "Patch {{.Name}}"
+// @Param {{.LowerName}}_id path string true "{{.Name}} ID"
+// @Success 200 {object} common.ResponseHTTP{data=models.{{.Name}}Patch}
+// @Failure 400 {object} common.ResponseHTTP{}
+// @Failure 500 {object} common.ResponseHTTP{}
+// @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [patch]
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx fiber.Ctx) error {
+	
+
+
+	 // Borrow patch model from pool
+    patch_{{.LowerName}} := models.{{.Name}}PatchItemPool.Get()
+    defer models.{{.Name}}PatchItemPool.Put(patch_{{.LowerName}})
+    patch_{{.LowerName}}.Reset()
+
+    //getting object_id from path param
+    // validate path params
+	id:= contx.Params("{{.LowerName}}_id")
+
+	// initalize resp 
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
+
+	// validate data struct
+	if err := contx.Bind().Body(patch_{{.LowerName}}); err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+    // then validate structure
+	if err := ctrl.Validator.Struct(patch_{{.LowerName}}); err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+
+	// 2. Borrow the single UserGet item for the JSON data
+	poolItem := models.{{.Name}}Pool.Get()
+	defer models.{{.Name}}Pool.Put(poolItem)
+
+    // patch {{.LowerName}} from service
+	err := ctrl.Svc.Update{{.Name}}(contx.Context(), patch_{{.LowerName}},id,poolItem)
+	if err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+
+	
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = poolItem
+	return common.SendJSON(contx,fiber.StatusOK, resp)
+}
+
+
+// Delete{{.Name}}s function removes a {{.LowerName}} by ID
+// @Summary Remove {{.Name}} by ID
+// @Description Remove {{.LowerName}} by ID
+// @Tags {{.Name}}s
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param {{.LowerName}}_id path string true "{{.Name}} ID"
+// @Success 200 {object} common.ResponseHTTP{}
+// @Failure 404 {object} common.ResponseHTTP{}
+// @Failure 503 {object} common.ResponseHTTP{}
+// @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [delete]
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.Name}}(contx fiber.Ctx) error {
+	
+
+
+	// validate path params
+	id:= contx.Params("{{.LowerName}}_id")
+
+	// initalize sync pool
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
+
+    // delete {{.LowerName}} from service
+	err := ctrl.Svc.Delete{{.Name}}(contx.Context(), id)
+	if err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+	
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = nil
+	return common.SendJSON(contx,fiber.StatusOK,resp)
+}

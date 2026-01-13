@@ -9,10 +9,10 @@ import (
 
 	"net/http"
 	"strconv"
-	"github.com/labstack/echo/v4"
+	 "github.com/gofiber/fiber/v3"
 	"{{.ProjectName}}/common"
 	"{{.ProjectName}}/{{.AppName}}/models"
-	"{{.ProjectName}}/observe"
+	//"{{.ProjectName}}/observe"
 )
 
 // ##########################################################
@@ -29,9 +29,8 @@ import (
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
 // @Failure 400 {object} common.ResponseHTTP{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerFieldName}}_id{{ "}" }}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [post]
-func (ctrl *{{ .AppName | toPascalCase }}Controller)  Add{{.FieldName}}To{{.ParentName}}(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
+func (ctrl *{{ .AppName | toPascalCase }}Controller)  Add{{.FieldName}}To{{.ParentName}}(contx fiber.Ctx) error {
+
 
 	// validate path params
 	{{.LowerFieldName}}_id := contx.Param("{{.LowerFieldName}}_id")
@@ -39,21 +38,24 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller)  Add{{.FieldName}}To{{.Pare
 	// validate path params
 	{{.LowerParentName}}_id := contx.Param("{{.LowerParentName}}_id")
 
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
 
-	err := ctrl.Svc.Add{{.ParentName}}To{{.FieldName}}(tracer.Tracer, {{.LowerParentName}}_id,{{.LowerFieldName}}_id)
+
+	err := ctrl.Svc.Add{{.ParentName}}To{{.FieldName}}(contx.Request().Context(), {{.LowerParentName}}_id,{{.LowerFieldName}}_id)
 	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
-	// return value if transaction is sucessfull
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Message: "Success Added {{.FieldName}} to  {{.ParentName}}.",
-		Data:    nil,
-	})
+		
+	resp.Message = "Success Added {{.FieldName}} to  {{.ParentName}}."
+	resp.Success = true
+	resp.Data = nil
+	return contx.JSON(http.StatusOK, resp)
 }
 
 
@@ -70,32 +72,34 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller)  Add{{.FieldName}}To{{.Pare
 // @Failure 400 {object} common.ResponseHTTP{}
 // @Failure 500 {object} common.ResponseHTTP{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerFieldName}}_id{{ "}" }}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [delete]
-func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.FieldName}}From{{.ParentName}}(contx echo.Context) error {
-	//  Geting tracer
-		tracer := contx.Get("tracer").(*observe.RouteTracer)
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.FieldName}}From{{.ParentName}}(contx fiber.Ctx) error {
+	
 
 	// validate path params
 	{{.LowerFieldName}}_id := contx.Param("{{.LowerFieldName}}_id")
 
 	// validate path params
 	{{.LowerParentName}}_id := contx.Param("{{.LowerParentName}}_id")
+	
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
+
 
 
 	// removing {{.FieldName}}From{{.ParentName}}
-	err := ctrl.Svc.Remove{{ .ParentName}}From{{.FieldName}}(tracer.Tracer, {{.LowerParentName}}_id,{{.LowerFieldName}}_id)
+	err := ctrl.Svc.Remove{{ .ParentName}}From{{.FieldName}}(contx.Request().Context(), {{.LowerParentName}}_id,{{.LowerFieldName}}_id)
 	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
-	// return value if transaction is sucessfull
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Message: "Success Removing {{.FieldName}} From {{.ParentName}}.",
-		Data:    nil,
-	})
+	resp.Message = "Success Removing {{.FieldName}} to  {{.ParentName}}."
+	resp.Success = true
+	resp.Data = nil
+	return contx.JSON(http.StatusOK, resp)
 }
 
 
@@ -112,20 +116,22 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.FieldName}}From{{.
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
 // @Failure 400 {object} common.ResponseHTTP{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
-func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.ParentName}}s(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.ParentName}}s(contx fiber.Ctx) error {
+
+
+	// initalize resp
+	resp_err := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp_err)
 
 	//  parsing Query Prameters
 	Page, _ := strconv.Atoi(contx.QueryParam("page"))
 	Limit, _ := strconv.Atoi(contx.QueryParam("size"))
 	//  checking if query parameters  are correct
 	if Page == 0 || Limit == 0 {
-		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
-			Success: false,
-			Message: "Not Allowed, Bad request",
-			Data:    nil,
-		})
+		resp_err.Message = "Not Allowed Params"
+		resp_err.Success = false
+		resp_err.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp_err)
 	}
 
 	// validate path params
@@ -140,25 +146,31 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.Pare
 	// validate pagination
 	pagination.Validate()
 
-    // Fetch {{.LowerParentName}}s from service
-	{{.LowerFieldName}}s,totalCount, err := ctrl.Svc.Get{{.ParentName}}{{.FieldName}}s(tracer.Tracer,{{.LowerParentName}}_id ,pagination)
+	// Ensure it goes back to the pool at the end of the request
+	itemsPtr := models.{{.FieldName}}sPool.Get()
+	defer models.{{.FieldName}}sPool.Put(itemsPtr)
+
+	// get relation items
+	totalCount, err := ctrl.Svc.Get{{.ParentName}}{{.FieldName}}s(contx.Request().Context(),{{.LowerParentName}}_id ,pagination, itemsPtr)
 	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
+		resp_err.Message = err.Error()
+		resp_err.Success = false
+		resp_err.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp_err)
 	}
 
 
 	// Send paginated response
-	return contx.JSON(http.StatusOK, common.ResponsePagination{
-		Success: true,
-		Message: "Success",
-		Items:   {{.LowerFieldName}}s,
-		Total:   totalCount,
-		Page:    uint(Page),
-		Size:    uint(Limit),
-	})
+	resp := common.GetResponsePagination()
+	defer common.PutResponsePagination(resp)
+	resp.Success = true
+	resp.Message = "Success."
+	resp.Items = itemsPtr
+	resp.Total = totalCount
+	resp.Page = uint(Page)
+	resp.Size = uint(Limit)
+
+	return contx.JSON(http.StatusOK, resp)
 }
 
 // #########################
@@ -177,29 +189,34 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.Pare
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
 // @Failure 400 {object} common.ResponseHTTP{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerFieldName}}noncomplement{{.LowerParentName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
-func (ctrl *{{ .AppName | toPascalCase }}Controller) GetAll{{.FieldName}}sOf{{.ParentName}}s(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
+func (ctrl *{{ .AppName | toPascalCase }}Controller) GetAll{{.FieldName}}sOf{{.ParentName}}s(contx fiber.Ctx) error {
+
 
 	// validate path params
 	{{.LowerParentName}}_id := contx.Param("{{.LowerParentName}}_id")
+	
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
 
+	// Ensure it goes back to the pool at the end of the request
+	itemsPtr := models.{{.FieldName}}sPool.Get()
+	defer models.{{.FieldName}}sPool.Put(itemsPtr)
 
-    // Fetch {{.LowerParentName}}s from service
-	{{.LowerFieldName}}s, err := ctrl.Svc.GetAll{{.FieldName}}sFor{{.ParentName}}(tracer.Tracer,{{.LowerParentName}}_id)
+    // Fetch {{.LowerParentName}}s relations from service
+	err := ctrl.Svc.GetAll{{.FieldName}}sFor{{.ParentName}}(contx.Request().Context(),{{.LowerParentName}}_id,itemsPtr)
 	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
 	// return value if transaction is sucessfull
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Data:   {{.LowerFieldName}}s,
-		Message: "working",
-	})
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = itemsPtr
+	return contx.JSON(http.StatusOK, resp)
 }
 
 // Get {{.FieldName}}s of {{.ParentName}} Complement
@@ -213,28 +230,33 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) GetAll{{.FieldName}}sOf{{.P
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
 // @Failure 400 {object} common.ResponseHTTP{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerFieldName}}complement{{.LowerParentName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
-func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}Complement{{.ParentName}}s(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}Complement{{.ParentName}}s(contx fiber.Ctx) error {
+
 
 	// validate path params
 	{{.LowerParentName}}_id := contx.Param("{{.LowerParentName}}_id")
 
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
+
+	// Ensure it goes back to the pool at the end of the request
+	itemsPtr := models.{{.FieldName}}sPool.Get()
+	defer models.{{.FieldName}}sPool.Put(itemsPtr)
 
     // Fetch {{.LowerParentName}}s from service
-	{{.LowerFieldName}}s, err := ctrl.Svc.GetAll{{.FieldName}}s{{.LowerParentName }}DoesNotHave(tracer.Tracer,{{.LowerParentName}}_id)
+	err := ctrl.Svc.GetAll{{.FieldName}}s{{.LowerParentName }}DoesNotHave(contx.Request().Context(),{{.LowerParentName}}_id,itemsPtr)
 	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
 
 	// return value if transaction is sucessfull
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Data:   {{.LowerFieldName}}s,
-		Message: "working",
-	})
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = itemsPtr
+	return contx.JSON(http.StatusOK, resp)
 }

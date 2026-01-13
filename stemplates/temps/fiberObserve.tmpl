@@ -1,0 +1,77 @@
+package observe
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"{{.ProjectName}}/configs"
+	"github.com/gofiber/fiber/v3"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	oteltrace "go.opentelemetry.io/otel/trace"
+)
+
+// ---------------- Fiber-compatible App Tracer ----------------
+
+func NewAppTracer(cfg *configs.EnvConfig) oteltrace.Tracer {
+	return otel.Tracer(fmt.Sprintf("cli-server-%v", cfg.GetOrDefault("APP_NAME", "blue-app")))
+}
+
+// InitTracer sets up the global TracerProvider
+func InitTracer(cfg *configs.EnvConfig) *sdktrace.TracerProvider {
+	traceExporter := cfg.Get("TRACE_EXPORTER")
+	tracerHost := cfg.Get("TRACER_HOST")
+	tracerPort := cfg.GetOrDefault("TRACER_PORT", "4317") // Default OTLP gRPC port
+
+	res := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceNameKey.String(cfg.Get("APP_NAME")),
+	)
+
+	sampleSize, _ := strconv.ParseFloat(cfg.GetOrDefault("TRACER_SAMPLE", "0.01"), 64)
+	sampler := sdktrace.ParentBased(sdktrace.TraceIDRatioBased(sampleSize))
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithResource(res),
+		sdktrace.WithSampler(sampler),
+	)
+
+	if strings.ToLower(traceExporter) == "jaeger" && tracerHost != "" {
+		exporter, err := otlptracegrpc.New(context.Background(),
+			otlptracegrpc.WithInsecure(),
+			otlptracegrpc.WithEndpoint(tracerHost+":"+tracerPort),
+			otlptracegrpc.WithReconnectionPeriod(5*time.Second),
+		)
+		if err == nil {
+			batcher := sdktrace.NewBatchSpanProcessor(exporter,
+				sdktrace.WithMaxQueueSize(30000),
+				sdktrace.WithMaxExportBatchSize(2048),
+				sdktrace.WithBatchTimeout(5*time.Second),
+			)
+			tp.RegisterSpanProcessor(batcher)
+		} else {
+			fmt.Println("OTLP Exporter creation failed:", err)
+		}
+	}
+
+	otel.SetTracerProvider(tp)
+	return tp
+}
+
+// ---------------- RouteTracer Wrapper ----------------
+
+type RouteTracer struct {
+	Ctx  context.Context
+	Span oteltrace.Span
+}
+
+// FiberAppSpanner starts a span for a Fiber request
+func FiberAppSpanner(c fiber.Ctx, spanName string, appTracer oteltrace.Tracer) (context.Context, oteltrace.Span) {
+	return appTracer.Start(c.Context(), spanName)
+}

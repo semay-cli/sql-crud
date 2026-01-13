@@ -1,0 +1,298 @@
+package logs
+
+import (
+	"io"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/labstack/gommon/log"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+)
+
+/* ===================== */
+/* Logger definition     */
+/* ===================== */
+
+type Logger struct {
+	logger *zap.Logger
+	sugar  *zap.SugaredLogger
+	level  zap.AtomicLevel
+	output io.Writer
+}
+
+// Field is used by legacy parts of your app
+type Field map[string]any
+
+var FieldPool = sync.Pool{
+	New: func() any {
+		return make(Field, 8)
+	},
+}
+
+func GetField() Field {
+	f := FieldPool.Get().(Field)
+	for k := range f {
+		delete(f, k)
+	}
+	return f
+}
+
+func PutField(f Field) {
+	// optional safety: clear again
+	for k := range f {
+		delete(f, k)
+	}
+	FieldPool.Put(f)
+}
+
+// // FieldPool now correctly handles []any for the helper functions
+// var slicePool = sync.Pool{
+// 	New: func() any {
+// 		return make([]any, 0, 16)
+// 	},
+// }
+
+// zapFieldPool handles structured fields for maximum performance in Infoj/Errorj
+var zapFieldPool = sync.Pool{
+	New: func() any {
+		return make([]zap.Field, 0, 16)
+	},
+}
+
+/* ===================== */
+/* Constructor           */
+/* ===================== */
+
+func NewZapLogger() *Logger {
+	atomicLevel := zap.NewAtomicLevelAt(zap.DebugLevel)
+
+	encoderCfg := zap.NewProductionEncoderConfig()
+	encoderCfg.TimeKey = "ts"
+	encoderCfg.LevelKey = "level"
+	encoderCfg.CallerKey = "caller"
+	encoderCfg.MessageKey = "msg"
+	encoderCfg.EncodeLevel = zapcore.LowercaseLevelEncoder
+	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderCfg.EncodeCaller = zapcore.ShortCallerEncoder
+
+	encoder := zapcore.NewJSONEncoder(encoderCfg)
+
+	infoFile, _ := os.OpenFile("server.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	errorFile, _ := os.OpenFile("server-error.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+	infoBuffered := &zapcore.BufferedWriteSyncer{
+		WS:            zapcore.AddSync(infoFile),
+		Size:          256 * 1024,
+		FlushInterval: 5 * time.Second,
+	}
+
+	errorBuffered := &zapcore.BufferedWriteSyncer{
+		WS:            zapcore.AddSync(errorFile),
+		Size:          64 * 1024,
+		FlushInterval: 1 * time.Second,
+	}
+
+	infoCore := zapcore.NewCore(encoder, infoBuffered, atomicLevel)
+	errorCore := zapcore.NewCore(encoder, errorBuffered, zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl >= zap.ErrorLevel
+	}))
+
+	core := zapcore.NewTee(infoCore, errorCore)
+
+	samplerCore := zapcore.NewSamplerWithOptions(
+		core,
+		time.Second,
+		100,
+		10,
+	)
+
+	// Optimization: We only add stacktraces on Panic or higher to prevent
+	// memory spikes during high-concurrency Error logging.
+	logger := zap.New(samplerCore,
+		zap.AddCaller(),
+		zap.AddCallerSkip(1),
+		zap.AddStacktrace(zap.PanicLevel),
+	)
+
+	return &Logger{
+		logger: logger,
+		sugar:  logger.Sugar(),
+		level:  atomicLevel,
+		output: infoBuffered,
+	}
+}
+
+func (l *Logger) GetZapLogger() *zap.Logger {
+	return l.logger
+}
+
+/* ===================== */
+/* Optimized Log Methods */
+/* ===================== */
+
+func (l *Logger) Infow(msg string, keysAndValues ...any) {
+	l.sugar.Infow(msg, keysAndValues...)
+}
+
+func (l *Logger) Errorw(msg string, keysAndValues ...any) {
+	l.sugar.Errorw(msg, keysAndValues...)
+}
+
+func (l *Logger) Infoj(j log.JSON) {
+	fields := zapFieldPool.Get().([]zap.Field)
+	fields = fields[:0]
+	for k, v := range j {
+		fields = append(fields, zap.Any(k, v))
+	}
+	l.logger.Info("info", fields...)
+	zapFieldPool.Put(fields)
+}
+
+func (l *Logger) Errorj(j log.JSON) {
+	fields := zapFieldPool.Get().([]zap.Field)
+	fields = fields[:0]
+	for k, v := range j {
+		fields = append(fields, zap.Any(k, v))
+	}
+	l.logger.Error("error", fields...)
+	zapFieldPool.Put(fields)
+}
+
+func (l *Logger) Sync() {
+	_ = l.logger.Sync()
+}
+
+/* ===================== */
+/* Echo.Logger Interface */
+/* ===================== */
+
+func (l *Logger) Output() io.Writer { return l.output }
+
+func (l *Logger) SetOutput(w io.Writer) {
+	l.output = w
+	ws := zapcore.AddSync(w)
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+		ws,
+		l.level,
+	)
+	l.logger = zap.New(core)
+	l.sugar = l.logger.Sugar()
+}
+
+func (l *Logger) Prefix() string     { return "" }
+func (l *Logger) SetPrefix(p string) {}
+func (l *Logger) SetHeader(h string) {}
+
+func (l *Logger) Level() log.Lvl {
+	switch l.level.Level() {
+	case zap.DebugLevel:
+		return log.DEBUG
+	case zap.InfoLevel:
+		return log.INFO
+	case zap.WarnLevel:
+		return log.WARN
+	case zap.ErrorLevel:
+		return log.ERROR
+	default:
+		return log.INFO
+	}
+}
+
+func (l *Logger) SetLevel(v log.Lvl) {
+	switch v {
+	case log.DEBUG:
+		l.level.SetLevel(zap.DebugLevel)
+	case log.INFO:
+		l.level.SetLevel(zap.InfoLevel)
+	case log.WARN:
+		l.level.SetLevel(zap.WarnLevel)
+	case log.ERROR:
+		l.level.SetLevel(zap.ErrorLevel)
+	}
+}
+
+/* ---- Log Methods Redirect ---- */
+
+func (l *Logger) Print(i ...any)            { l.sugar.Info(i...) }
+func (l *Logger) Printf(f string, a ...any) { l.sugar.Infof(f, a...) }
+func (l *Logger) Printj(j log.JSON)         { l.Infoj(j) }
+
+func (l *Logger) Debug(i ...any)            { l.sugar.Debug(i...) }
+func (l *Logger) Debugf(f string, a ...any) { l.sugar.Debugf(f, a...) }
+func (l *Logger) Debugj(j log.JSON)         { l.DebugjInternal(j) }
+
+func (l *Logger) Info(i ...any)            { l.sugar.Info(i...) }
+func (l *Logger) Infof(f string, a ...any) { l.sugar.Infof(f, a...) }
+
+func (l *Logger) Warn(i ...any)            { l.sugar.Warn(i...) }
+func (l *Logger) Warnf(f string, a ...any) { l.sugar.Warnf(f, a...) }
+func (l *Logger) Warnj(j log.JSON)         { l.WarnjInternal(j) }
+
+func (l *Logger) Error(i ...any)            { l.sugar.Error(i...) }
+func (l *Logger) Errorf(f string, a ...any) { l.sugar.Errorf(f, a...) }
+
+func (l *Logger) Fatal(i ...any)            { l.sugar.Fatal(i...) }
+func (l *Logger) Fatalf(f string, a ...any) { l.sugar.Fatalf(f, a...) }
+func (l *Logger) Fatalj(j log.JSON)         { l.FataljInternal(j) }
+
+func (l *Logger) Panic(i ...any)            { l.sugar.Panic(i...) }
+func (l *Logger) Panicf(f string, a ...any) { l.sugar.Panicf(f, a...) }
+func (l *Logger) Panicj(j log.JSON)         { l.PanicjInternal(j) }
+
+// InfoS logs using structured fields for zero allocation
+func (l *Logger) InfoS(msg string, fields ...zap.Field) {
+	l.logger.Info(msg, fields...)
+}
+
+// ErrorS logs using structured fields for zero allocation
+func (l *Logger) ErrorS(msg string, fields ...zap.Field) {
+	l.logger.Error(msg, fields...)
+}
+
+/* ===================== */
+/* Internal Optimized Helpers */
+/* ===================== */
+
+func (l *Logger) DebugjInternal(j log.JSON) {
+	fields := zapFieldPool.Get().([]zap.Field)
+	fields = fields[:0]
+	for k, v := range j {
+		fields = append(fields, zap.Any(k, v))
+	}
+	l.logger.Debug("debug", fields...)
+	zapFieldPool.Put(fields)
+}
+
+func (l *Logger) WarnjInternal(j log.JSON) {
+	fields := zapFieldPool.Get().([]zap.Field)
+	fields = fields[:0]
+	for k, v := range j {
+		fields = append(fields, zap.Any(k, v))
+	}
+	l.logger.Warn("warn", fields...)
+	zapFieldPool.Put(fields)
+}
+
+func (l *Logger) FataljInternal(j log.JSON) {
+	fields := zapFieldPool.Get().([]zap.Field)
+	fields = fields[:0]
+	for k, v := range j {
+		fields = append(fields, zap.Any(k, v))
+	}
+	l.logger.Fatal("fatal", fields...)
+	zapFieldPool.Put(fields)
+}
+
+func (l *Logger) PanicjInternal(j log.JSON) {
+	fields := zapFieldPool.Get().([]zap.Field)
+	fields = fields[:0]
+	for k, v := range j {
+		fields = append(fields, zap.Any(k, v))
+	}
+	l.logger.Panic("panic", fields...)
+	zapFieldPool.Put(fields)
+}
+

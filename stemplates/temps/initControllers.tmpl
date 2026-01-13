@@ -6,6 +6,10 @@ import (
 	validator "github.com/go-playground/validator/v10"
 )
 
+
+var globalValidator = validator.New() 
+
+
 type {{ .AppName | toPascalCase }}Controller struct {
 	Svc       *services.{{ .AppName | toPascalCase }}Service
 	Validator *validator.Validate
@@ -15,7 +19,7 @@ type {{ .AppName | toPascalCase }}Controller struct {
 func New{{ .AppName | toPascalCase }}Controller(svc *services.{{ .AppName | toPascalCase }}Service ) *{{ .AppName | toPascalCase }}Controller {
 	return &{{ .AppName | toPascalCase }}Controller{
 		Svc:       svc,
-		Validator: validator.New(),
-		Executor: concurrency.NewExecutor(2000),
+		Validator: globalValidator,
+		Executor: concurrency.NewExecutor(100),
 	}
 }

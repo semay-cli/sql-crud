@@ -18,3 +18,16 @@ func GenerateTracerEchoSetup(data stemplates.Data) {
 	stemplates.WriteTemplateToFile("observe/prometheus.go", promTmpl, data)
 	stemplates.WriteTemplateToFile("prometheus.yml", tmplMetric, data)
 }
+
+func GenerateTracerFiberSetup(data stemplates.Data) {
+	tmpl := stemplates.LoadTemplate("fiberObserve")
+	promTmpl := stemplates.LoadTemplate("prometheusFiber")
+	tmplMetric := stemplates.LoadTemplate("promyml")
+	err := os.MkdirAll("observe", os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+	stemplates.WriteTemplateToFile("observe/tracer.go", tmpl, data)
+	stemplates.WriteTemplateToFile("observe/prometheus.go", promTmpl, data)
+	stemplates.WriteTemplateToFile("prometheus.yml", tmplMetric, data)
+}

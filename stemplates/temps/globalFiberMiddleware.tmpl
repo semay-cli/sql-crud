@@ -1,0 +1,155 @@
+
+package manager
+
+import (
+	"sync"
+
+	"{{.ProjectName}}/observe"
+	"github.com/gofiber/fiber/v3"
+	oteltrace "go.opentelemetry.io/otel/trace"
+)
+
+var AppRouteNames map[string]string
+
+// ------------------------------------------------------------------
+// RouteTracer pool
+// ------------------------------------------------------------------
+var tracerPool = sync.Pool{
+	New: func() any {
+		return &observe.RouteTracer{}
+	},
+}
+
+// ------------------------------------------------------------------
+// AppContext wrapper (Fiber-style)
+// ------------------------------------------------------------------
+type AppContext struct {
+	C      fiber.Ctx
+	Tracer *observe.RouteTracer
+}
+
+var appContextPool = sync.Pool{
+	New: func() any {
+		return &AppContext{}
+	},
+}
+
+// ------------------------------------------------------------------
+// Simple OTel span starter (Fiber)
+// ------------------------------------------------------------------
+func NewOTelFiberSpanStarter(appTracer oteltrace.Tracer) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		spanName := "unnamed-route"
+		if route := c.Route(); route != nil {
+			spanName = route.Path
+		}
+
+		// Start span and attach context to Fiber
+		_, span := observe.FiberAppSpanner(c, spanName, appTracer)
+
+		// Cleanup after request
+		defer span.End()
+		return c.Next()
+	}
+}
+
+// ------------------------------------------------------------------
+// Full chain middleware (Fiber)
+// ------------------------------------------------------------------
+func FullChainMiddleware(appTracer oteltrace.Tracer) fiber.Handler {
+	const (
+		hdrAllowOrigin  = "Access-Control-Allow-Origin"
+		hdrAllowMethods = "Access-Control-Allow-Methods"
+		hdrAllowHeaders = "Access-Control-Allow-Headers"
+		hdrMaxAge       = "Access-Control-Max-Age"
+		hdrAppToken     = "X-App-Token"
+		hdrRouteName    = "Route-Name"
+
+		valMethods = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+		valMaxAge  = "86400"
+		valNotSet  = "not-set"
+	)
+
+	return func(c fiber.Ctx) error {
+		// ------------------------------------------------------------------
+		// Path lookup
+		// ------------------------------------------------------------------
+		path := "unnamed-route"
+		if route := c.Route(); route != nil {
+			path = route.Path
+		}
+
+		// ------------------------------------------------------------------
+		// Bypass login/stats
+		// ------------------------------------------------------------------
+		if path == "/api/v1/blue_auth/login" || path == "/api/v1/blue_auth/stats" {
+			return c.Next()
+		}
+
+		// ------------------------------------------------------------------
+		// Borrow AppContext
+		// ------------------------------------------------------------------
+		ac := appContextPool.Get().(*AppContext)
+		ac.C = c
+
+		// ------------------------------------------------------------------
+		// CORS headers
+		// ------------------------------------------------------------------
+		c.Set(hdrAllowOrigin, "*")
+		c.Set(hdrAllowMethods, valMethods)
+		c.Set(hdrAllowHeaders, "*")
+		c.Set(hdrMaxAge, valMaxAge)
+
+		// Handle OPTIONS preflight
+		if c.Method() == fiber.MethodOptions {
+			ac.C = nil
+			appContextPool.Put(ac)
+			return c.SendStatus(fiber.StatusNoContent)
+		}
+
+		// ------------------------------------------------------------------
+		// Start OTel span
+		// ------------------------------------------------------------------
+		traceCtx, span := observe.FiberAppSpanner(c, path, appTracer)
+
+		rt := tracerPool.Get().(*observe.RouteTracer)
+		rt.Ctx = traceCtx
+		rt.Span = span
+		ac.Tracer = rt
+
+		// This attaches your OTel context to the Fiber Ctx
+		c.SetContext(traceCtx)
+
+		// ------------------------------------------------------------------
+		// Request headers
+		// ------------------------------------------------------------------
+		if len(c.Get(hdrAppToken)) == 0 {
+			c.Set(hdrAppToken, "login")
+		}
+
+		routeName := valNotSet
+		if name, ok := AppRouteNames[path]; ok {
+			routeName = name
+		}
+		c.Set(hdrRouteName, routeName)
+
+		// ------------------------------------------------------------------
+		// Next handler
+		// ------------------------------------------------------------------
+		err := c.Next()
+
+		// ------------------------------------------------------------------
+		// Cleanup
+		// ------------------------------------------------------------------
+		span.End()
+		rt.Ctx = nil
+		rt.Span = nil
+		tracerPool.Put(rt)
+
+		ac.C = nil
+		ac.Tracer = nil
+		appContextPool.Put(ac)
+
+		return err
+	}
+}

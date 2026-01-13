@@ -2,46 +2,50 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
-	"time"
-	"fmt"
 	"strings"
+	"time"
+
+	"{{ .ProjectName }}/configs"
+	"{{ .ProjectName }}/logs" // Import your Zap logger package
+	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/stdlib"
+
+	// "github.com/lib/pq"
+
+	"github.com/mattn/go-sqlite3"
 	sqldblogger "github.com/simukti/sqldb-logger"
 	"github.com/simukti/sqldb-logger/logadapter/zapadapter"
-	"github.com/go-sql-driver/mysql"
-	"github.com/lib/pq"
-	"github.com/mattn/go-sqlite3"
 	gormMysql "gorm.io/driver/mysql"
 	gormPostgres "gorm.io/driver/postgres"
 	gormSqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormLog "gorm.io/gorm/logger"
-	"{{.ProjectName}}/configs"
-	"{{.ProjectName}}/logs"
 	"gorm.io/plugin/opentelemetry/tracing"
 )
 
 func LoggerFile(app_name string) (*os.File, error) {
-	log_file_name := fmt.Sprintf("%s_gorm.log", app_name)
-	gormLogFile, gerr := os.OpenFile(log_file_name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if gerr != nil {
-		log.Fatalf("error opening file: %v", gerr)
-	}
-	return gormLogFile, nil
+	log_file_name := app_name + "_gorm.log"
+	return os.OpenFile(log_file_name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 }
 
 func ReturnSession(app_name string, cfg *configs.EnvConfig, zapLogger *logs.Logger) (*gorm.DB, error) {
-	env_name := fmt.Sprintf("%s_DB_TYPE", strings.ToUpper(app_name))
+	env_name := strings.ToUpper(app_name) + "_DB_TYPE"
 	app_env := cfg.Get(env_name)
 
-	// GORM Internal Logger setup (for GORM specific events)
+	// Check if we should use the expensive logger wrapper
+	// Set DEBUG_SQL=true in your .env or export it to enable
+	debugSQL := cfg.Get("DEBUG_SQL") == "true"
+
+	// GORM Internal Logger setup
 	gormFile, _ := LoggerFile(app_name)
 	newLogger := gormLog.New(
 		log.New(gormFile, "\r\n", log.LstdFlags),
 		gormLog.Config{
 			SlowThreshold:             time.Second,
-			LogLevel:                  gormLog.Info,
+			LogLevel:                  gormLog.Error, // Keep at Error for high perf
 			Colorful:                  true,
 			IgnoreRecordNotFoundError: true,
 		},
@@ -51,32 +55,62 @@ func ReturnSession(app_name string, cfg *configs.EnvConfig, zapLogger *logs.Logg
 		DBSession *gorm.DB
 		sqlDB     *sql.DB
 		err       error
-		adapter   = zapadapter.New(zapLogger.GetZapLogger()) // Use the raw *zap.Logger
 	)
 
-	// Universal switch for driver wrapping
+	// Universal switch for all three databases
 	switch app_env {
 	case "postgres":
-		dsn := cfg.Get(fmt.Sprintf("%s_POSTGRES_URI", strings.ToUpper(app_name)))
-		sqlDB = sqldblogger.OpenDriver(dsn, &pq.Driver{}, adapter)
-		DBSession, err = gorm.Open(gormPostgres.New(gormPostgres.Config{
-			Conn:                 sqlDB,
-			PreferSimpleProtocol: true,
-		}), &gorm.Config{Logger: newLogger, SkipDefaultTransaction: true})
+		dsn := cfg.Get(strings.ToUpper(app_name) + "_POSTGRES_URI")
+
+		if debugSQL {
+			adapter := zapadapter.New(zapLogger.GetZapLogger())
+			// Pass stdlib.GetDefaultDriver() for pgx
+			sqlDB = sqldblogger.OpenDriver(dsn, stdlib.GetDefaultDriver(), adapter)
+		} else {
+			// HIGH PERFORMANCE MODE: Direct open
+			sqlDB, err = sql.Open("pgx", dsn)
+		}
+
+		if err == nil {
+			DBSession, err = gorm.Open(gormPostgres.New(gormPostgres.Config{
+				Conn:                 sqlDB,
+				PreferSimpleProtocol: true,
+			}), &gorm.Config{Logger: newLogger, SkipDefaultTransaction: true})
+		}
 
 	case "mysql":
-		dsn := cfg.Get(fmt.Sprintf("%s_MYSQL_URI", strings.ToUpper(app_name)))
-		sqlDB = sqldblogger.OpenDriver(dsn, &mysql.MySQLDriver{}, adapter)
-		DBSession, err = gorm.Open(gormMysql.New(gormMysql.Config{
-			Conn: sqlDB,
-		}), &gorm.Config{Logger: newLogger, SkipDefaultTransaction: true})
+		dsn := cfg.Get(strings.ToUpper(app_name) + "_MYSQL_URI")
+
+		if debugSQL {
+			adapter := zapadapter.New(zapLogger.GetZapLogger())
+			sqlDB = sqldblogger.OpenDriver(dsn, &mysql.MySQLDriver{}, adapter)
+		} else {
+			// HIGH PERFORMANCE MODE: Direct open
+			sqlDB, err = sql.Open("mysql", dsn)
+		}
+
+		if err == nil {
+			DBSession, err = gorm.Open(gormMysql.New(gormMysql.Config{
+				Conn: sqlDB,
+			}), &gorm.Config{Logger: newLogger, SkipDefaultTransaction: true})
+		}
 
 	case "sqlite":
-		dsn := cfg.Get(fmt.Sprintf("%s_SQLLITE_URI", strings.ToUpper(app_name)))
-		sqlDB = sqldblogger.OpenDriver(dsn, &sqlite3.SQLiteDriver{}, adapter)
-		DBSession, err = gorm.Open(gormSqlite.New(gormSqlite.Config{
-			Conn: sqlDB,
-		}), &gorm.Config{Logger: newLogger, SkipDefaultTransaction: true})
+		dsn := cfg.Get(strings.ToUpper(app_name) + "_SQLLITE_URI")
+
+		if debugSQL {
+			adapter := zapadapter.New(zapLogger.GetZapLogger())
+			sqlDB = sqldblogger.OpenDriver(dsn, &sqlite3.SQLiteDriver{}, adapter)
+		} else {
+			// HIGH PERFORMANCE MODE: Direct open
+			sqlDB, err = sql.Open("sqlite3", dsn)
+		}
+
+		if err == nil {
+			DBSession, err = gorm.Open(gormSqlite.New(gormSqlite.Config{
+				Conn: sqlDB,
+			}), &gorm.Config{Logger: newLogger, SkipDefaultTransaction: true})
+		}
 
 	default:
 		return nil, fmt.Errorf("database type %s not supported", app_env)
@@ -86,17 +120,16 @@ func ReturnSession(app_name string, cfg *configs.EnvConfig, zapLogger *logs.Logg
 		return nil, err
 	}
 
-	// Apply Pool Settings to the wrapped sqlDB
+	// Apply Pool Settings
 	if app_env == "sqlite" {
 		sqlDB.SetMaxOpenConns(1)
 		sqlDB.SetConnMaxLifetime(5 * time.Second)
 	} else {
 		sqlDB.SetMaxOpenConns(100)
-		sqlDB.SetMaxIdleConns(20)
+		sqlDB.SetMaxIdleConns(80)
 		sqlDB.SetConnMaxLifetime(30 * time.Minute)
 	}
 
 	_ = DBSession.Use(tracing.NewPlugin())
 	return DBSession, nil
 }
-

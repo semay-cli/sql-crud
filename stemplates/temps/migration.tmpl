@@ -23,6 +23,10 @@ func BoolPtr(b bool) *bool {
     return &b
 }
 
+func TimePtr(b time.Time) *time.Time {
+	return &b
+}
+
 func InitDatabase(test_flag bool, cfg *configs.EnvConfig,logger *logs.Logger) {
 
 	db, err  := database.ReturnSession("{{ .AppName | replaceString }}",cfg,logger)
@@ -89,10 +93,10 @@ func CreateSuperUser( cfg *configs.EnvConfig, logger *logs.Logger) {
 		LastName:      "User",
 		Username:      "superuser",
 		Password:      hashedPassword,
-		DateRegistred: time.Now(),
+		DateRegistred: TimePtr(time.Now()),
 		Disabled:      BoolPtr(false),
 		UUID:          uuid_uuid.String(),
-		CreatedAt:     time.Now(),
+		CreatedAt:     TimePtr(time.Now()),
 	}
 
 	// Insert the user into the database

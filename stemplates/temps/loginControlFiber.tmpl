@@ -1,0 +1,175 @@
+package controllers
+
+import (
+    "strings"
+
+	{{- if eq .AuthAppName .CurrentAppName }}
+	//"time"
+	"{{.ProjectName}}/{{ .CurrentAppName}}/models"
+	{{- end }}
+	"{{.ProjectName}}/common"
+	"github.com/gofiber/fiber/v3"
+)
+
+{{- if eq .AuthAppName .CurrentAppName }}
+// Login Request for Endpoint
+type LoginPost struct {
+	GrantType string {{.BackTick}}json:"grant_type" validate:"required" example:"authorization_code,refresh_token,token_decode"{{.BackTick}}
+	Email     string {{.BackTick}}json:"email" validate:"email,min=6,max=32"{{.BackTick}}
+	Password  string {{.BackTick}}json:"password"{{.BackTick}}
+	Token     string {{.BackTick}}json:"token"{{.BackTick}}
+}
+
+// Access token Response
+type TokenResponse struct {
+	AccessToken  string {{.BackTick}}json:"access_token"{{.BackTick}}
+	RefreshToken string {{.BackTick}}json:"refresh_token"{{.BackTick}}
+	TokenType    string {{.BackTick}}json:"token_type"{{.BackTick}}
+}
+
+{{ if eq .AuthAppType "sso" }}
+// @ID login
+// @Summary Auth
+// @Description Login
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param user body LoginPost true "Login"
+// @Success 202 {object} common.ResponseHTTP{data=TokenResponse{}}
+// @Failure 404 {object} common.ResponseHTTP{}
+// @Failure 503 {object} common.ResponseHTTP{}
+// @Router /{{.CurrentAppName | replaceString}}/login [post]
+func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx fiber.Ctx) error {
+
+	//validating post data
+	login_request := new(LoginPost)
+
+	//first parse request data
+	if err := contx.Bind().Body(&login_request); err != nil {
+
+		return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP{
+			Success: false,
+			Message: err.Error(),
+			Data:    nil,
+		})
+	}
+
+	// then validate structure
+	if err := ctrl.Validator.Struct(login_request); err != nil {
+		return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP{
+			Success: false,
+			Message: err.Error(),
+			Data:    nil,
+		})
+	}
+    repo := ctrl.Svc.Repo
+	switch login_request.GrantType {
+	case "authorization_code":
+		token, err := repo.Login(login_request.Email, login_request.Password,contx.Context())
+		if err != nil {
+			return common.SendJSON(contx,fiber.StatusUnauthorized, common.ResponseHTTP{
+				Success: false,
+				Message: err.Error(),
+				Data:    nil,
+			})
+		}
+		claims, _ := repo.ParseJWTToken(token)
+		accessString := token
+		refreshString, _ := repo.CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 65)
+		data := TokenResponse{
+			AccessToken:  accessString,
+			RefreshToken: refreshString,
+			TokenType:    "Bearer",
+		}
+		// Optionally update last login
+		//repo.DB.WithContext(contx.Request().Context()).Model(&models.User{}).Where("id = ?", claims.UserID).Update("last_login", time.Now())
+		return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP{
+			Success: true,
+			Message: "Authorization Granted",
+			Data:    data,
+		})
+	case "refresh_token":
+		newToken, err := repo.RefreshToken(login_request.Token)
+		if err != nil {
+			return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP{
+				Success: false,
+				Message: err.Error(),
+				Data:    nil,
+			})
+		}
+		claims, _ := repo.ParseJWTToken(newToken)
+		refreshString, _ := repo.CreateJWTToken(models.User{ID: uint(claims.UserID)}, claims.Scopes, claims.Groups, 65)
+		data := TokenResponse{
+			AccessToken:  newToken,
+			RefreshToken: refreshString,
+			TokenType:    "Bearer",
+		}
+		return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP{
+			Success: true,
+			Message: "Token refreshed",
+			Data:    data,
+		})
+	case "token_decode":
+		claims, err := repo.DecodeToken(login_request.Token)
+		if err != nil {
+			return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP{
+				Success: false,
+				Message: err.Error(),
+				Data:    nil,
+			})
+		}
+		return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP{
+			Success: true,
+			Message: "Token decode successful",
+			Data:    claims,
+		})
+	default:
+		return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP{
+			Success: false,
+			Message: "Unknown grant type",
+			Data:    nil,
+		})
+	}
+}
+
+
+
+// Get User Details
+// @Summary Get current user details
+// @Description Returns authenticated user details, groups, and scopes
+// @Tags Authentication
+// @Security ApiKeyAuth
+// @Produce json
+// @Success 200 {object} common.ResponseHTTP{data=map[string]interface{}}
+// @Failure 401 {object} common.ResponseHTTP
+// @Failure 500 {object} common.ResponseHTTP
+// @Router /{{.CurrentAppName | replaceString}}/user/details [get]
+func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) GetUserDetails(contx fiber.Ctx) error {
+	authHeader := contx.Get("X-APP-TOKEN")
+	if authHeader == "" {
+		return common.SendJSON(contx,fiber.StatusUnauthorized, common.ResponseHTTP{
+			Success: false,
+			Message: "missing authorization header",
+		})
+	}
+
+	// Strip "Bearer " from the header
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+	userDetails, err := ctrl.Svc.GetUserDetails(tokenString)
+	if err != nil {
+		return common.SendJSON(contx,fiber.StatusInternalServerError, common.ResponseHTTP{
+			Success: false,
+			Message: err.Error(),
+		})
+	}
+
+	return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP{
+		Success: true,
+		Message: "User details fetched successfully",
+		Data:    userDetails,
+	})
+}
+
+{{- end }}
+{{- end }}

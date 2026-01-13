@@ -1,0 +1,260 @@
+
+package controllers
+
+import (
+	{{- $break_math := false }}
+		{{- if .MtM}}
+	{{- $break_math = true }}
+	{{- end}}
+	"strconv"
+	 "github.com/gofiber/fiber/v3"
+	"{{.ProjectName}}/common"
+	"{{.ProjectName}}/{{.AppName}}/models"
+	//"{{.ProjectName}}/observe"
+)
+
+// ##########################################################
+// ##########  Relationship  Services to {{.FieldName}}
+// ##########################################################
+// Add {{.FieldName}} to {{.ParentName}}
+// @Summary Add {{.ParentName}} to {{.FieldName}}
+// @Description Add {{.FieldName}} {{.ParentName}}
+// @Tags {{.ParentName}}{{.FieldName}}s
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param {{.LowerFieldName}}_id path string true "{{.FieldName}} ID"
+// @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
+// @Failure 400 {object} common.ResponseHTTP{}
+// @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerFieldName}}_id{{ "}" }}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [post]
+func (ctrl *{{ .AppName | toPascalCase }}Controller)  Add{{.FieldName}}To{{.ParentName}}(contx fiber.Ctx) error {
+
+
+	// validate path params
+	{{.LowerFieldName}}_id := contx.Params("{{.LowerFieldName}}_id")
+
+	// validate path params
+	{{.LowerParentName}}_id := contx.Params("{{.LowerParentName}}_id")
+
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
+
+
+	err := ctrl.Svc.Add{{.ParentName}}To{{.FieldName}}(contx.Context(), {{.LowerParentName}}_id,{{.LowerFieldName}}_id)
+	if err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+		
+	resp.Message = "Success Added {{.FieldName}} to  {{.ParentName}}."
+	resp.Success = true
+	resp.Data = nil
+	return common.SendJSON(contx,fiber.StatusOK, resp)
+}
+
+
+// Delete {{.FieldName}} from {{.ParentName}}
+// @Summary Delete {{.FieldName}}
+// @Description Delete {{.FieldName}} {{.ParentName}}
+// @Tags {{.ParentName}}{{.FieldName}}s
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param {{.LowerFieldName}}_id path string true "{{.FieldName}} ID"
+// @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
+// @Success 200 {object} common.ResponseHTTP{data=models.{{.ParentName}}Post}
+// @Failure 400 {object} common.ResponseHTTP{}
+// @Failure 500 {object} common.ResponseHTTP{}
+// @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerFieldName}}_id{{ "}" }}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [delete]
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.FieldName}}From{{.ParentName}}(contx fiber.Ctx) error {
+	
+
+	// validate path params
+	{{.LowerFieldName}}_id := contx.Params("{{.LowerFieldName}}_id")
+
+	// validate path params
+	{{.LowerParentName}}_id := contx.Params("{{.LowerParentName}}_id")
+	
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
+
+
+
+	// removing {{.FieldName}}From{{.ParentName}}
+	err := ctrl.Svc.Remove{{ .ParentName}}From{{.FieldName}}(contx.Context(), {{.LowerParentName}}_id,{{.LowerFieldName}}_id)
+	if err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+	resp.Message = "Success Removing {{.FieldName}} to  {{.ParentName}}."
+	resp.Success = true
+	resp.Data = nil
+	return common.SendJSON(contx,fiber.StatusOK, resp)
+}
+
+
+// Get {{.FieldName}}s of {{.ParentName}}
+// @Summary Get {{.ParentName}} to {{.FieldName}}
+// @Description Get {{.FieldName}} {{.ParentName}}
+// @Tags {{.ParentName}}{{.FieldName}}s
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param page query int true "page"
+// @Param size query int true "page size"
+// @Success 200 {object} common.ResponsePagination{data=[]models.{{.FieldName}}Get}
+// @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
+// @Failure 400 {object} common.ResponseHTTP{}
+// @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.ParentName}}s(contx fiber.Ctx) error {
+
+
+	// initalize resp
+	resp_err := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp_err)
+
+	//  parsing Query Prameters
+	Page, _ := strconv.Atoi(contx.Query("page"))
+	Limit, _ := strconv.Atoi(contx.Query("size"))
+	//  checking if query parameters  are correct
+	if Page == 0 || Limit == 0 {
+		resp_err.Message = "Not Allowed Params"
+		resp_err.Success = false
+		resp_err.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp_err)
+	}
+
+	// validate path params
+	{{.LowerParentName}}_id := contx.Params("{{.LowerParentName}}_id")
+
+    // Prepare pagination model
+	pagination := models.Pagination{
+		Page:   Page,
+		Size:   Limit,
+	}
+
+	// validate pagination
+	pagination.Validate()
+
+	// Ensure it goes back to the pool at the end of the request
+	itemsPtr := models.{{.FieldName}}sPool.Get()
+	defer models.{{.FieldName}}sPool.Put(itemsPtr)
+
+	// get relation items
+	totalCount, err := ctrl.Svc.Get{{.ParentName}}{{.FieldName}}s(contx.Context(),{{.LowerParentName}}_id ,pagination, itemsPtr)
+	if err != nil {
+		resp_err.Message = err.Error()
+		resp_err.Success = false
+		resp_err.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp_err)
+	}
+
+
+	// Send paginated response
+	resp := common.GetResponsePagination()
+	defer common.PutResponsePagination(resp)
+	resp.Success = true
+	resp.Message = "Success."
+	resp.Items = itemsPtr
+	resp.Total = totalCount
+	resp.Page = uint(Page)
+	resp.Size = uint(Limit)
+
+	return common.SendJSON(contx,fiber.StatusOK, resp)
+}
+
+// #########################
+// No Pagination Services###
+// #########################
+
+
+// Get {{.FieldName}}s of {{.ParentName}} Not Complement
+// @Summary Get {{.ParentName}} to {{.FieldName}} Complement
+// @Description Get {{.FieldName}} {{.ParentName}} Complement
+// @Tags {{.ParentName}}{{.FieldName}}s
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Success 200 {object} common.ResponseHTTP{data=[]models.{{.FieldName}}Get}
+// @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
+// @Failure 400 {object} common.ResponseHTTP{}
+// @Router /{{$.AppName | replaceString}}/{{.LowerFieldName}}noncomplement{{.LowerParentName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
+func (ctrl *{{ .AppName | toPascalCase }}Controller) GetAll{{.FieldName}}sOf{{.ParentName}}s(contx fiber.Ctx) error {
+
+
+	// validate path params
+	{{.LowerParentName}}_id := contx.Params("{{.LowerParentName}}_id")
+	
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
+
+	// Ensure it goes back to the pool at the end of the request
+	itemsPtr := models.{{.FieldName}}sPool.Get()
+	defer models.{{.FieldName}}sPool.Put(itemsPtr)
+
+    // Fetch {{.LowerParentName}}s relations from service
+	err := ctrl.Svc.GetAll{{.FieldName}}sFor{{.ParentName}}(contx.Context(),{{.LowerParentName}}_id,itemsPtr)
+	if err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+	// return value if transaction is sucessfull
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = itemsPtr
+	return common.SendJSON(contx,fiber.StatusOK, resp)
+}
+
+// Get {{.FieldName}}s of {{.ParentName}} Complement
+// @Summary Get {{.ParentName}} to {{.FieldName}} Not Complement
+// @Description Get {{.FieldName}} {{.ParentName}} Not Complement
+// @Tags {{.ParentName}}{{.FieldName}}s
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Success 200 {object} common.ResponseHTTP{data=[]models.{{.FieldName}}Get}
+// @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
+// @Failure 400 {object} common.ResponseHTTP{}
+// @Router /{{$.AppName | replaceString}}/{{.LowerFieldName}}complement{{.LowerParentName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}Complement{{.ParentName}}s(contx fiber.Ctx) error {
+
+
+	// validate path params
+	{{.LowerParentName}}_id := contx.Params("{{.LowerParentName}}_id")
+
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
+
+	// Ensure it goes back to the pool at the end of the request
+	itemsPtr := models.{{.FieldName}}sPool.Get()
+	defer models.{{.FieldName}}sPool.Put(itemsPtr)
+
+    // Fetch {{.LowerParentName}}s from service
+	err := ctrl.Svc.GetAll{{.FieldName}}s{{.LowerParentName }}DoesNotHave(contx.Context(),{{.LowerParentName}}_id,itemsPtr)
+	if err != nil {
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return common.SendJSON(contx,fiber.StatusInternalServerError, resp)
+	}
+
+
+	// return value if transaction is sucessfull
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = itemsPtr
+	return common.SendJSON(contx,fiber.StatusOK, resp)
+}

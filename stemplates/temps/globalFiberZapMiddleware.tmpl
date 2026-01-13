@@ -1,0 +1,54 @@
+
+package manager
+
+import (
+	"time"
+
+	"{{.ProjectName}}/logs"
+	"github.com/bushubdegefu/fx-pg/logs"
+	"github.com/gofiber/fiber/v3"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+)
+
+func FiberZapLogger(l *logs.Logger) fiber.Handler {
+	// Pre-get the core logger to skip redundant calls inside the handler
+	z := l.GetZapLogger()
+
+	return func(c fiber.Ctx) error {
+		// 1. Start timer
+		start := time.Now()
+
+		// 2. Execute the chain
+		err := c.Next()
+
+		// 3. Performance Guard: Only proceed if Zap is actually going to log
+		// At 100k+ RPS, creating fields for discarded logs is the #1 CPU killer.
+		if ce := z.Check(zap.InfoLevel, "request"); ce != nil {
+
+			// Use c.RequestCtx() to access low-level fasthttp data without allocations
+			fCtx := c.RequestCtx()
+			latency := time.Since(start)
+
+			// Construct fields
+			// Note: c.Method() and c.Path() in v3 return strings by default.
+			// For absolute max performance, use fCtx.Method() which returns []byte.
+			fields := []zapcore.Field{
+				zap.ByteString("method", fCtx.Method()),
+				zap.ByteString("path", fCtx.Path()),
+				zap.Int("status", c.Response().StatusCode()),
+				zap.Duration("latency", latency),
+				zap.String("ip", c.IP()),
+			}
+
+			if err != nil {
+				fields = append(fields, zap.Error(err))
+				ce.Entry.Level = zap.ErrorLevel // Bump level if there's an error
+			}
+
+			ce.Write(fields...)
+		}
+
+		return err
+	}
+}

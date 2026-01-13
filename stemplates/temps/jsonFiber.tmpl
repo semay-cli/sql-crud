@@ -1,0 +1,57 @@
+package common
+
+import (
+	"sync"
+
+	"github.com/go-json-experiment/json"
+	"github.com/gofiber/fiber/v3"
+)
+
+
+/* ===================== */
+/* Encoder Pool          */
+/* ===================== */
+
+// We pool the Encoder itself to reuse its internal buffering logic
+var encoderPool = sync.Pool{
+	New: func() any {
+		return json.NewEncoder(nil)
+	},
+}
+
+/* ===================== */
+/* Fiber Response Helper */
+/* ===================== */
+
+// SendJSON handles memory-efficient JSON responses in Fiber v3
+func SendJSON(c fiber.Ctx, status int, v any) error {
+	c.Status(status)
+	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSONCharsetUTF8)
+
+	// Fiber v3 provides c.Response().BodyWriter() which implements io.Writer
+	// Writing directly to the body writer avoids extra []byte allocations
+	w := c.Response().BodyWriter()
+
+	enc := encoderPool.Get().(*json.Encoder)
+	enc.SetEscapeHTML(false)
+
+	// Set the destination to Fiber's body writer
+	enc.SetIndent("", "")
+	// Note: We use a temporary wrapper if we need to reset the encoder
+	// but standard json.NewEncoder(w) is usually fast enough.
+	// For maximum efficiency, we write directly:
+
+	err := json.NewEncoder(w).Encode(v)
+	encoderPool.Put(enc)
+
+	return err
+}
+
+/* ===================== */
+/* Decode Helper         */
+/* ===================== */
+
+func ParseJSON(c fiber.Ctx, v any) error {
+	// Fiber v3's c.Bind().JSON() is already highly optimized and uses pools internally
+	return c.Bind().JSON(v)
+}

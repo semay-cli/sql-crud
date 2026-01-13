@@ -16,8 +16,11 @@ import (
 	"github.com/labstack/echo/v4"
 	"{{.ProjectName}}/common"
 	"{{.ProjectName}}/{{.AppName}}/models"
-	"{{.ProjectName}}/observe"
+	// "{{.ProjectName}}/observe"
 )
+
+
+
 
 // Get{{.Name}}s function to get a {{.Name}}s with pagination and searchFields
 // @Summary Get {{.Name}}s
@@ -36,33 +39,39 @@ import (
 // @Failure 404 {object} common.ResponseHTTP{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}} [get]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
+	
 
+	
     //  parsing Query Prameters
 	Page, _ := strconv.Atoi(contx.QueryParam("page"))
 	Limit, _ := strconv.Atoi(contx.QueryParam("size"))
+
+	// initalize resp
+	resp_err := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp_err)
+
 	//  checking if query parameters  are correct
 	if Page == 0 || Limit == 0 {
-		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
-			Success: false,
-			Message: "Not Allowed, Bad request",
-			Data:    nil,
-		})
+		resp_err.Message = "Not allowed Params"
+		resp_err.Success = false
+		resp_err.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp_err)
 	}
 
+	
 	// Getting search fields
-	searchTerm := make(map[string]any)
-		if err := contx.Bind(&searchTerm); err != nil {
-			return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
-				Success: false,
-				Message: err.Error(),
-				Data:    nil,
-			})
-		}
+	searchTerm := common.GetSearchMap()
+	defer common.PutSearchMap(searchTerm)
+	
+	if err := contx.Bind(&searchTerm); err != nil {
+		resp_err.Message = err.Error()
+		resp_err.Success = false
+		resp_err.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp_err)
+	}
 
 	searchFields := []string{ {{.SearchFields | formatSliceToString}} }
-	filteredSearchTerm := common.FilterMapByKeys(searchTerm, searchFields)
+	common.FilterMapInPlace(searchTerm, searchFields)
 
 	// Prepare pagination model
 	pagination := models.Pagination{
@@ -72,24 +81,32 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx echo.Co
 
 	pagination.Validate()
 
+	// 2. Ensure it goes back to the pool at the end of the request
+	itemsPtr := models.{{.Name}}sPool.Get()
+	defer models.{{.Name}}sPool.Put(itemsPtr)
+
+
 	// Fetch {{.LowerName}}s from service
-	{{.LowerName}}s,totalCount, err := ctrl.Svc.Get{{.Name}}s(tracer.Tracer, pagination, filteredSearchTerm)
+	totalCount, err := ctrl.Svc.Get{{.Name}}s(contx.UserContext(), pagination, searchTerm,itemsPtr)
 	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
+		resp_err.Message = err.Error()
+		resp_err.Success = false
+		resp_err.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp_err)
 	}
 
 	// Send paginated response
-	return contx.JSON(http.StatusOK, common.ResponsePagination{
-		Success: true,
-		Message: "Success.",
-		Items:   {{.LowerName}}s,
-		Total:   totalCount,
-		Page:    uint(Page),
-		Size:    uint(Limit),
-	})
+	resp := common.GetResponsePagination()
+	defer common.PutResponsePagination(resp)
+	resp.Success = true
+	resp.Message = "Success."
+	resp.Items = *itemsPtr
+	resp.Total = totalCount
+	resp.Page = uint(Page)
+	resp.Size = uint(Limit)
+
+	return contx.JSON(http.StatusOK, resp)
+
 }
 
 
@@ -106,28 +123,38 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx echo.Co
 // @Failure 404 {object} common.ResponseHTTP{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [get]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}ByID(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
+	
 
    	//  parsing Query Prameters
 	id := contx.Param("{{.LowerName}}_id")
 
+
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
+
+	var item models.{{.Name}}
+
     // Fetch {{.LowerName}} from service
-	{{.LowerName}}, err := ctrl.Svc.GetOne{{.Name}}(tracer.Tracer, id)
+	err := ctrl.Svc.GetOne{{.Name}}(contx.UserContext(), id,&item)
 	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
-	// Send paginated response
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Message: "Success",
-		Data:   {{.LowerName}},
-	})
-
+	// 2. Borrow the single UserGet item for the JSON data
+	poolItem := models.{{.Name}}GetItemPool.Get()
+	defer models.{{.Name}}GetItemPool.Put(poolItem)
+	
+	// 5. Copy from Stack -> Pooled Item
+	item.CopyTo(poolItem)
+	
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = poolItem
+	return contx.JSON(http.StatusOK, resp)
 
 }
 
@@ -144,49 +171,53 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}ByID(contx echo
 // @Failure 500 {object} common.ResponseHTTP{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}} [post]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
+	
+
+	// Borrow request model from pool
+    posted_{{.LowerName}} := models.{{.Name}}PostItemPool.Get()
+    defer models.{{.Name}}PostItemPool.Put(posted_{{.LowerName}})
+    posted_{{.LowerName}}.Reset() // Clear previous data
 
 
-
-	//validating post data
-	posted_{{.LowerName}} := new(models.{{.Name}}Post)
+	// initalize resp
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
 
 	//first parse request data
 	if err := contx.Bind(&posted_{{.LowerName}}); err != nil {
-		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-			Data:    nil,
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
 	// then validate structure
 	if err := ctrl.Validator.Struct(posted_{{.LowerName}}); err != nil {
-		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-			Data:    nil,
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
+
+	// 2. Borrow the single UserGet item for the JSON data
+	poolItem := models.{{.Name}}Pool.Get()
+	defer models.{{.Name}}Pool.Put(poolItem)
 
 
     // post {{.LowerName}} from service
-	{{.LowerName}}, err := ctrl.Svc.Create{{.Name}}(tracer.Tracer, posted_{{.LowerName}})
+	err := ctrl.Svc.Create{{.Name}}(contx.UserContext(), posted_{{.LowerName}},poolItem)
 	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
-
-	// return data if transaction is sucessfull
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Message: "{{.Name}} created successfully.",
-		Data:    {{.LowerName}},
-	})
+	
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = poolItem
+	return contx.JSON(http.StatusOK, resp)
 }
 
 // Patch {{.Name}} to data
@@ -203,52 +234,58 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx echo.Co
 // @Failure 500 {object} common.ResponseHTTP{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [patch]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
+	
 
+
+	 // Borrow patch model from pool
+    patch_{{.LowerName}} := models.{{.Name}}PatchItemPool.Get()
+    defer models.{{.Name}}PatchItemPool.Put(patch_{{.LowerName}})
+    patch_{{.LowerName}}.Reset()
 
     //getting object_id from path param
     // validate path params
 	id:= contx.Param("{{.LowerName}}_id")
 
+	// initalize resp 
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
 
 	// validate data struct
-	patch_{{.LowerName}} := new(models.{{.Name}}Patch)
 	if err := contx.Bind(&patch_{{.LowerName}}); err != nil {
-		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-			Data:    nil,
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
     // then validate structure
 	if err := ctrl.Validator.Struct(patch_{{.LowerName}}); err != nil {
-		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-			Data:    nil,
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
 
+	// 2. Borrow the single UserGet item for the JSON data
+	poolItem := models.{{.Name}}Pool.Get()
+	defer models.{{.Name}}Pool.Put(poolItem)
 
     // patch {{.LowerName}} from service
-	{{.LowerName}}, err := ctrl.Svc.Update{{.Name}}(tracer.Tracer, patch_{{.LowerName}},id)
+	err := ctrl.Svc.Update{{.Name}}(contx.UserContext(), patch_{{.LowerName}},id,poolItem)
 	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
 
-	// return data if transaction is sucessfull
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Message: "{{.Name}} updated successfully.",
-		Data:    {{.LowerName}},
-	})
+	
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = poolItem
+	return contx.JSON(http.StatusOK, resp)
 }
 
 
@@ -265,28 +302,28 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx echo.C
 // @Failure 503 {object} common.ResponseHTTP{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [delete]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.Name}}(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
+	
 
 
 	// validate path params
 	id:= contx.Param("{{.LowerName}}_id")
 
+	// initalize sync pool
+	resp := common.GetResponseHTTP()
+	defer common.PutResponseHTTP(resp)
 
     // delete {{.LowerName}} from service
-	err := ctrl.Svc.Delete{{.Name}}(tracer.Tracer, id)
+	err := ctrl.Svc.Delete{{.Name}}(contx.UserContext(), id)
 	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
-			Success: false,
-			Message: err.Error(),
-		})
+		resp.Message = err.Error()
+		resp.Success = false
+		resp.Data = nil
+		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
-
-	// Return success respons
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
-		Success: true,
-		Message: "{{.Name}} deleted successfully.",
-		Data:    nil,
-	})
+	
+	resp.Success = true
+	resp.Message = "Success"
+	resp.Data = nil
+	return contx.JSON(http.StatusOK, resp)
 }

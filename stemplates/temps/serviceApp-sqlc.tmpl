@@ -19,74 +19,70 @@ import (
 
 
 // Create inserts a new {{.LowerName}}
-func (s *{{ .AppName | toPascalCase }}Service) Create{{.Name}}(ctx context.Context, posted_{{.LowerName}} *models.{{.Name}}Post) (*models.{{.Name}}Get, error) {
-	var {{.LowerName}}  models.{{.Name}}
+func (s *{{ .AppName | toPascalCase }}Service) Create{{.Name}}(ctx context.Context, posted_{{.LowerName}} *models.{{.Name}}Post,out *models.{{.Name}}) error {
 
 	err := s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
-			item, err := s.Repo.Create{{.Name}}(ctx, posted_{{.LowerName}}, tx)
+			err := s.Repo.Create{{.Name}}(ctx, posted_{{.LowerName}}, tx, out)
             if err != nil {
                 return fmt.Errorf("{{.LowerName}} creation failed: %v", err)
             }
-            {{.LowerName}} = *item
+        
 			return nil
 		})
         if err != nil {
-           return &models.{{.Name}}Get{}, err
+           return  err
         }
 
 
-		return {{.LowerName}}.ToGet(), err
+		return  err
 }
 
 // GetOne fetches a {{.LowerName}} by ID
-func (s *{{ .AppName | toPascalCase }}Service) GetOne{{.Name}}(ctx context.Context, id string) (*models.{{.Name}}Get, error) {
+func (s *{{ .AppName | toPascalCase }}Service) GetOne{{.Name}}(ctx context.Context, id string, out *models.{{.Name}})  error {
 
-	item, err := s.Repo.GetOne{{.Name}}(ctx, id)
+	err := s.Repo.GetOne{{.Name}}(ctx, id, out)
     if err != nil {
-        return &models.{{.Name}}Get{},fmt.Errorf("{{.LowerName}} creation failed: %v", err)
+        return fmt.Errorf("{{.LowerName}} creation failed: %v", err)
     }
 
-	return item.ToGet(), nil
+	return nil
 }
 
 // Get returns {{.LowerName}}s with pagination and search
-func (s *{{ .AppName | toPascalCase }}Service) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]any) ([]models.{{.Name}}Get, uint, error) {
+func (s *{{ .AppName | toPascalCase }}Service) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]any, out *[]models.{{.Name}}Get) (uint, error) {
 
-	{{.LowerName}}s, totalCount, err := s.Repo.Get{{.Name}}s(ctx, pagination, searchTerm)
+	totalCount, err := s.Repo.Get{{.Name}}s(ctx, pagination, searchTerm,out)
     if err != nil {
-        return nil, 0, fmt.Errorf("failed to get {{.LowerName}}s: %v", err)
+        return 0, fmt.Errorf("failed to get {{.LowerName}}s: %v", err)
     }
-	return {{.LowerName}}s,totalCount, nil
+	return totalCount, nil
 }
 
 // Update modifies a {{.Name}}s by ID
-func (s *{{ .AppName | toPascalCase }}Service) Update{{.Name}}(ctx context.Context, patch_{{.LowerName}} *models.{{.Name}}Patch, id string) (*models.{{.Name}}Get, error) {
+func (s *{{ .AppName | toPascalCase }}Service) Update{{.Name}}(ctx context.Context, patch_{{.LowerName}} *models.{{.Name}}Patch, id string,out *models.{{.Name}}) error {
 	// update User
-	var existing models.{{.Name}}
+
       _, err := strconv.Atoi(id)
     if err != nil {
-        return &models.{{.Name}}Get{},fmt.Errorf("invalid ID: %v", err)
+        return fmt.Errorf("invalid ID: %v", err)
     }
 
 	err = s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
-         item, err := s.Repo.GetOne{{.Name}}(ctx, id)
-         if err != nil {
-             return err
-         }           
 
-        existing = *item
-        item, err = s.Repo.Update{{.Name}}(ctx, &existing, patch_{{.LowerName}}, tx)
+        
+        err = s.Repo.Update{{.Name}}(ctx, id , patch_{{.LowerName}}, tx,out)
         if err != nil {
             return fmt.Errorf("{{.LowerName}} update failed: %v", err)
         }
-        existing = *item
+        
         return nil
     })
+
 	if err != nil {
-        return &models.{{.Name}}Get{}, err
+        return err
     }
 
-	return existing.ToGet(), err
+	return err
 }
 
 // Delete removes a {{.LowerName}} by ID
@@ -98,14 +94,8 @@ func (s *{{ .AppName | toPascalCase }}Service) Delete{{.Name}}(ctx context.Conte
     }
 
 	err = s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
-        var existing models.{{.Name}}
-        item, err := s.Repo.GetOne{{.Name}}(ctx, id)
-        if err != nil {
-            return err
-        }            
-        existing = *item
-
-		if err := s.Repo.Delete{{.Name}}(ctx, &existing, tx); err != nil {
+        
+		if err := s.Repo.Delete{{.Name}}(ctx, id, tx); err != nil {
             return fmt.Errorf("{{.LowerName}} deletion failed: %v", err)
         }
 		return nil

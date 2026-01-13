@@ -28,6 +28,26 @@ func GenerateControllers(data stemplates.Data) {
 
 }
 
+func GenerateControllersFiber(data stemplates.Data) {
+	tmpl := stemplates.LoadTemplate("controllersFiber")
+	rlnTmpl := stemplates.LoadTemplate("relationControllersFiber")
+
+	_ = os.MkdirAll("controllers", os.ModePerm)
+
+	for _, model := range data.Models {
+		filePath := fmt.Sprintf("controllers/%s_crud_controllers.go", strings.ToLower(model.Name))
+		stemplates.WriteTemplateToFileModel(filePath, tmpl, model)
+	}
+
+	for _, model := range data.Models {
+		for _, relation := range model.Relations {
+			filePath := fmt.Sprintf("controllers/%s_%v_controllers.go", strings.ToLower(relation.ParentName), strings.ToLower(relation.FieldName))
+			stemplates.WriteTemplateToFileRelation(filePath, rlnTmpl, relation)
+		}
+	}
+
+}
+
 func GenerateControllerInit(data stemplates.Data) {
 	inittmpl := stemplates.LoadTemplate("initControllers")
 	if err := os.MkdirAll("controllers", os.ModePerm); err != nil {

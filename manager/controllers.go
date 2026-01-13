@@ -24,6 +24,7 @@ func runControllerCommand(cmd *cobra.Command, args []string) {
 
 	// framework, _ := cmd.Flags().GetString("frame")
 	appName, _ := cmd.Flags().GetString("app")
+	frameName, _ := cmd.Flags().GetString("frame")
 
 	if appName == "" {
 		fmt.Println("Error: --app flag is required.")
@@ -36,12 +37,12 @@ func runControllerCommand(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// Generate models and migrations
-	// if framework == "init" {
-	// generate.GenerateModels(stemplates.RenderData)
+	if frameName == "fiber" {
+		generate.GenerateControllersFiber(stemplates.RenderData)
+	} else {
+		generate.GenerateControllers(stemplates.RenderData)
 
-	// } else {
-	generate.GenerateControllers(stemplates.RenderData)
+	}
 	generate.GenerateControllerInit(stemplates.RenderData)
 	stemplates.CommonCMD()
 	// }
@@ -50,7 +51,7 @@ func runControllerCommand(cmd *cobra.Command, args []string) {
 func init() {
 	// Register flags for CRUD and Models commands
 	controllercli.Flags().StringVarP(&config_file, "config", "c", "config.json", "Specify the data file to load")
-	// controllercli.Flags().StringP("frame", "f", "", "frame work to use for building the")
+	controllercli.Flags().StringP("frame", "f", "", "frame work to use for building fiber")
 	controllercli.Flags().StringP("app", "a", "", "Set app name, e.g., \"blue-auth\"")
 
 	// Register commands to the root (goFrame)

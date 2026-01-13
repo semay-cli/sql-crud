@@ -2,7 +2,7 @@ package models
 
 import (
 	"time"
-
+   
 	{{- $break_7 := false }}
 	{{- range .Fields }}
 	{{- if eq .Type "sql.NullInt64" }}
@@ -13,6 +13,7 @@ import (
 	{{- if $break_7  }}
 	"database/sql"
 	{{- end }}
+    "{{.ProjectName}}/common"
 
 )
 
@@ -40,6 +41,15 @@ func (m *{{.Name}}) ToGet() *{{.Name}}Get {
         CreatedAt: m.CreatedAt,
         UpdatedAt: m.UpdatedAt,
     }
+}
+
+func (m *{{.Name}}) CopyTo(target *{{.Name}}Get) {
+    
+        {{- range .Fields}}
+        {{if .Get}}target.{{.Name}}=m.{{.Name}}{{- end}}
+        {{- end}}
+        target.CreatedAt=m.CreatedAt
+        target.UpdatedAt=m.UpdatedAt
 }
 
 {{- $hasUUID := false }}
@@ -85,3 +95,24 @@ type {{.Name}}Put struct {
 type {{.Name}}Patch struct {
 	{{range .Fields}}{{- if .Patch}}{{.Name}} *{{.Type}}  {{.BackTick}}{{.Annotation}} required:"false"{{.BackTick}}{{- end}}
 {{end}}}
+
+
+
+// Define Generic Item Pool for single User responses
+var {{.Name}}Pool = common.NewItemPool[{{.Name}}]()
+var {{.Name}}GetPool = common.NewItemPool[{{.Name}}Get]()
+
+// Define Generic Item Pool for UserGet (API Response)
+var {{.Name}}GetItemPool = common.NewItemPool[{{.Name}}Get]()
+var {{.Name}}PostItemPool = common.NewItemPool[{{.Name}}Post]()
+var {{.Name}}PatchItemPool = common.NewItemPool[{{.Name}}Patch]()
+
+// Define Generic Slice Pool for List responses
+var {{.Name}}sPool = common.NewSlicePool[{{.Name}}Get](20)
+
+// Also ensure every model has a Reset() method for the Generic Pool to work
+// Also ensure every model has a Reset() method for the Generic Pool to work
+func (u *{{.Name}}) Reset()    { *u = {{.Name}}{} }
+func (u *{{.Name}}Get) Reset() { *u = {{.Name}}Get{} }
+func (u *{{.Name}}Post) Reset() { *u = {{.Name}}Post{} }
+func (u *{{.Name}}Patch) Reset() { *u = {{.Name}}Patch{} }

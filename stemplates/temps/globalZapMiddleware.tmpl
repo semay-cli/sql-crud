@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	//"go.uber.org/zap"
 	"{{.ProjectName}}/logs"
+	"{{.ProjectName}}/pools"
 
 )
 
@@ -37,55 +38,43 @@ func (w *bodyWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
-// RequestLogger logs request and response with truncated bodies
-func ZapRequestLogger(logger *logs.Logger) echo.MiddlewareFunc {
+func ZapRequestLogger(l *logs.Logger) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			start := time.Now()
-
-			// --- Capture request body ---
-			reqBodyBytes, _ := io.ReadAll(c.Request().Body)
-			c.Request().Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
-
-			// --- Capture response body ---
-			resBody := &bytes.Buffer{}
-			originalWriter := c.Response().Writer
-			c.Response().Writer = &bodyWriter{
-				ResponseWriter: originalWriter,
-				Writer:         originalWriter,
-				body:           resBody,
-			}
-
-			// --- Process request ---
 			err := next(c)
-			stop := time.Now()
-			latency := stop.Sub(start)
 
-			// --- Log fields ---
-			fields := []logs.Field{
-				{"time": stop},
-				{"remote_ip": c.RealIP()},
-				{"host": c.Request().Host},
-				{"method": c.Request().Method},
-				{"uri": c.Request().RequestURI},
-				{"user_agent": c.Request().UserAgent()},
-				{"status": c.Response().Status},
-				{"latency": latency},
-				{"bytes_in": c.Request().ContentLength},
-				{"bytes_out": c.Response().Size},
-				{"request_body": truncate(reqBodyBytes, maxLogSize)},
-				{"response_body": truncate(resBody.Bytes(), maxLogSize)},
-			}
+			// 1. Get the underlying zap.Logger
+			z := l.GetZapLogger()
+			req := c.Request()
+			res := c.Response()
 
 			if err != nil {
-				c.Error(err)
-				fields = append(fields, logs.Field{"error": err.Error()})
-				logger.Error("request failed", fields)
-			} else {
-				logger.Info("request completed", fields)
+				// We always log errors, so no need for the Check guard here
+				l.ErrorS("request_error",
+					zap.String("method", req.Method),
+					zap.String("uri", req.RequestURI),
+					zap.Int("status", res.Status),
+					zap.Duration("latency", time.Since(start)),
+					zap.Error(err),
+				)
+				return err
 			}
 
-			return err
+			// 2. SUCCESS PATH: Use z.Check to stop the "48GB Allocation"
+			// This checks if the Sampler will actually write the log.
+			// If it won't, it returns nil and skips the zap.Fields below.
+			if ce := z.Check(zap.InfoLevel, "request"); ce != nil {
+				ce.Write(
+					zap.String("method", req.Method),
+					zap.String("uri", req.RequestURI),
+					zap.Int("status", res.Status),
+					zap.Int64("size", res.Size),
+					zap.Duration("latency", time.Since(start)),
+				)
+			}
+
+			return nil
 		}
 	}
 }

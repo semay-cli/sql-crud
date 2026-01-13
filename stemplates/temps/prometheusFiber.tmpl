@@ -1,0 +1,135 @@
+package observe
+
+import (
+	"log"
+	"net/http"
+	"time"
+	"fmt"
+
+	"{{.ProjectName}}/configs"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/adaptor"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
+)
+// ---------------- Prometheus Metrics ----------------
+
+var (
+	cpuUsage = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cpu_usage_percentage",
+			Help: "Current CPU usage percentage",
+		},
+		[]string{"cpu", "service"},
+	)
+
+	memUsage = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "memory_usage_percentage",
+			Help: "Current memory usage percentage",
+		},
+		[]string{"memory", "service"},
+	)
+
+	httpDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Help:    "HTTP request duration in seconds by method, path, and status code.",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"method", "path", "status_code", "service"},
+	)
+)
+
+func InitProm(prom *prometheus.Registry, cfg *configs.EnvConfig) {
+	prom.MustRegister(cpuUsage)
+	prom.MustRegister(memUsage)
+	prom.MustRegister(httpDuration)
+	go collectSystemMetrics(cfg)
+}
+
+func collectSystemMetrics(cfg *configs.EnvConfig) {
+	for {
+		// CPU
+		cpuPercent, err := cpu.Percent(0, false)
+		if err != nil {
+			log.Println("Error getting CPU usage:", err)
+		} else if len(cpuPercent) > 0 {
+			cpuUsage.WithLabelValues("total", cfg.Get("APP_NAME")).Set(cpuPercent[0])
+		}
+
+		// Memory
+		v, err := mem.VirtualMemory()
+		if err != nil {
+			log.Println("Error getting memory usage:", err)
+		} else {
+			memUsage.WithLabelValues("total", cfg.Get("APP_NAME")).Set(float64(v.Used) / float64(v.Total) * 100)
+		}
+
+		time.Sleep(5 * time.Second)
+	}
+}
+
+// ---------------- Status strings (pre-allocated) ----------------
+
+var statusStrings = map[int]string{
+	200: "200", 201: "201", 204: "204",
+	400: "400", 401: "401", 403: "403", 404: "404",
+	500: "500", 502: "502",
+}
+
+func getStatus(code int) string {
+	if s, ok := statusStrings[code]; ok {
+		return s
+	}
+	return "500"
+}
+
+// ---------------- Fiber Metrics Middleware ----------------
+
+// Returns a Fiber middleware that records request duration
+func PrometheusMiddleware(appName string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		start := time.Now()
+		err := c.Next() // call next handler
+
+		path := c.Route().Path
+		if path == "" {
+			path = "unknown"
+		}
+
+		status := getStatus(c.Response().StatusCode())
+		httpDuration.WithLabelValues(c.Method(), path, status, appName).
+			Observe(time.Since(start).Seconds())
+
+		return err
+	}
+}
+
+// ---------------- Metrics Endpoint ----------------
+
+func RegisterMetricsHandler(prom *prometheus.Registry) http.Handler {
+	// Return the handler for Prometheus scraping using the custom registry
+	return promhttp.HandlerFor(prom, promhttp.HandlerOpts{})
+}
+
+func SetupPrometheusMetrics(app *fiber.App, cfg *configs.EnvConfig) {
+	// Initialize Prometheus registry
+	prom := prometheus.NewRegistry()
+	InitProm(prom, cfg)
+
+	// Middleware to track HTTP request duration
+	app.Use(func(c fiber.Ctx) error {
+		start := time.Now()
+		err := c.Next()
+		duration := time.Since(start).Seconds()
+
+		httpDuration.WithLabelValues(c.Method(), c.Path(), fmt.Sprintf("%d", c.Response().StatusCode()), cfg.Get("APP_NAME")).Observe(duration)
+		return err
+	})
+
+	// Expose the /metrics endpoint for Prometheus to scrape
+	app.Get("/metrics", adaptor.HTTPHandler(RegisterMetricsHandler(prom)))
+}

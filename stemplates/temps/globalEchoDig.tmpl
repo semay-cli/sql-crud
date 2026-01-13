@@ -86,10 +86,13 @@ var (
 func NewEchoApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrace.Tracer, prom *prometheus.Registry) *echo.Echo {
 	app := echo.New()
 
+	// pooled json serilizers
+	app.JSONSerializer = NewPooledJSONSerializer()
+
 	app.Logger = logger
 
 	app.Use(middleware.Recover())
-	app.Use(middleware.CORS())
+	app.Use(FullChainMiddleware(appTracer))
 
 
     // Zap logging mouter
@@ -98,7 +101,7 @@ func NewEchoApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrace
 	// 👇 Custom OpenTelemetry middleware
 	app.Use(NewOTelEchoSpanStarter(appTracer))
 	observe.SetupPrometheusMetrics(app, cfg)
-	app.Use(observe.PrometheusMiddleware(cfg.Get("APP_NAME"), prom))
+	//app.Use(observe.PrometheusMiddleware(cfg.Get("APP_NAME")))
 
 	// Rate limit middleware
 	configLimit, _ := strconv.ParseFloat(cfg.GetOrDefault("RATE_LIMIT_PER_SECOND", "50000"), 64)

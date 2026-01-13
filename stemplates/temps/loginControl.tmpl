@@ -6,14 +6,9 @@ import (
 
 	{{- if eq .AuthAppName .CurrentAppName }}
 	//"time"
-
-
 	"{{.ProjectName}}/{{ .CurrentAppName}}/models"
-
-
 	{{- end }}
 	"{{.ProjectName}}/common"
-	"{{.ProjectName}}/observe"
 	"github.com/labstack/echo/v4"
 )
 
@@ -46,9 +41,6 @@ type TokenResponse struct {
 // @Failure 503 {object} common.ResponseHTTP{}
 // @Router /{{.CurrentAppName | replaceString}}/login [post]
 func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Context) error {
-	//  Geting tracer
-	tracer := contx.Get("tracer").(*observe.RouteTracer)
-
 
 	//validating post data
 	login_request := new(LoginPost)
@@ -74,7 +66,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Con
     repo := ctrl.Svc.Repo
 	switch login_request.GrantType {
 	case "authorization_code":
-		token, err := repo.Login(login_request.Email, login_request.Password,tracer.Tracer)
+		token, err := repo.Login(login_request.Email, login_request.Password,contx.Request().Context())
 		if err != nil {
 			return contx.JSON(http.StatusUnauthorized, common.ResponseHTTP{
 				Success: false,
@@ -91,7 +83,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Con
 			TokenType:    "Bearer",
 		}
 		// Optionally update last login
-		//repo.DB.WithContext(tracer.Tracer).Model(&models.User{}).Where("id = ?", claims.UserID).Update("last_login", time.Now())
+		//repo.DB.WithContext(contx.Request().Context()).Model(&models.User{}).Where("id = ?", claims.UserID).Update("last_login", time.Now())
 		return contx.JSON(http.StatusAccepted, common.ResponseHTTP{
 			Success: true,
 			Message: "Authorization Granted",

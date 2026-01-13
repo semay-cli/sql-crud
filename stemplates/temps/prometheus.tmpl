@@ -1,7 +1,6 @@
 package observe
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -90,50 +89,76 @@ func WrapHTTPHandler(h http.Handler) echo.HandlerFunc {
 	}
 }
 
+// Pre-calculate status code strings to avoid fmt.Sprintf allocations
+var statusStrings = map[int]string{
+	200: "200", 201: "201", 204: "204",
+	400: "400", 401: "401", 403: "403", 404: "404",
+	500: "500", 502: "502",
+}
+
 func SetupPrometheusMetrics(app *echo.Echo, cfg *configs.EnvConfig) {
-	// Initialize Prometheus registry
 	prom := prometheus.NewRegistry()
 	InitProm(prom, cfg)
+	appName := cfg.Get("APP_NAME")
 
 	app.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			start := time.Now()
-			err := next(c) // Call the next handler
-			duration := time.Since(start).Seconds()
+			err := next(c)
 
-			// Record the duration (add logic to log or track metrics here)
-			httpDuration.WithLabelValues(c.Request().Method, // HTTP Method (GET, POST, etc.)
-				c.Request().URL.Path,                   // Request Path (e.g., "/api/v1/resource")
-				fmt.Sprintf("%d", c.Response().Status), // Status code
-				cfg.Get("APP_NAME")).Observe(duration)
+			// 2. Use c.Path() to avoid unique metric per ID/Query
+			path := c.Path()
+			if path == "" {
+				path = "unmatched"
+			}
+
+			// 3. Optimized Observation
+			httpDuration.WithLabelValues(
+				c.Request().Method,
+				path,
+				getStatus(c.Response().Status), // Zero-alloc lookup
+				appName,
+			).Observe(time.Since(start).Seconds())
 
 			return err
 		}
 	})
 
-	// return err
-	// Expose the /metrics endpoint for Prometheus to scrape
 	app.GET("/metrics", WrapHTTPHandler(RegisterMetricsHandler(prom)))
 }
 
-func PrometheusMiddleware(appName string, prom *prometheus.Registry) echo.MiddlewareFunc {
+func getStatus(code int) string {
+	if s, ok := statusStrings[code]; ok {
+		return s
+	}
+	return "500"
+}
+
+func PrometheusMiddleware(appName string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			start := time.Now()
 			err := next(c)
-			duration := time.Since(start).Seconds()
+
+			// USE c.Path() NOT c.Request().URL.Path
+			// This prevents unique metrics for every ID/Query param
+			path := c.Path()
+			if path == "" {
+				path = "unknown"
+			}
 
 			httpDuration.WithLabelValues(
 				c.Request().Method,
-				c.Path(),
-				fmt.Sprintf("%d", c.Response().Status),
+				path,
+				getStatus(c.Response().Status), // Zero-alloc string lookup
 				appName,
-			).Observe(duration)
+			).Observe(time.Since(start).Seconds())
 
 			return err
 		}
 	}
 }
+
 
 func RegisterPrometheusEndpoint(e *echo.Echo, prom *prometheus.Registry) {
 	e.GET("/metrics", WrapHTTPHandler(RegisterMetricsHandler(prom)))

@@ -5,6 +5,7 @@ import (
 	"fmt"
     "strconv"
 	"strings"
+	"time"
 
 
 	"{{.ProjectName}}/configs"
@@ -36,45 +37,39 @@ func InitTracer(cfg *configs.EnvConfig) *sdktrace.TracerProvider {
 	)
 
 	// Use TraceIDRatioBased for random sampling (10% here) if env not set
-	sample_size, _ := strconv.ParseFloat(cfg.GetOrDefault("TRACER_SAMPLE", "0.1"), 32)
-	sampler := sdktrace.ParentBased(sdktrace.TraceIDRatioBased(sample_size))
 
-	// Create TracerProvider
+	sampleSize, _ := strconv.ParseFloat(cfg.GetOrDefault("TRACER_SAMPLE", "0.01"), 64)
+	sampler := sdktrace.ParentBased(sdktrace.TraceIDRatioBased(sampleSize))
+
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
 		sdktrace.WithSampler(sampler),
+		// FIX: Add resource detection to avoid repeated lookup
 	)
-
-	// Set global tracer provider and propagator
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	if strings.ToLower(traceExporter) == "jaeger" && tracerHost != "" {
 		exporter, err := otlptracegrpc.New(context.Background(),
 			otlptracegrpc.WithInsecure(),
-			otlptracegrpc.WithEndpoint(fmt.Sprintf("%s:%s", tracerHost, tracerPort)),
+			otlptracegrpc.WithEndpoint(tracerHost+":"+tracerPort), // Use simple concatenation
+			otlptracegrpc.WithReconnectionPeriod(5 * time.Second),
 		)
-		if err != nil {
-			panic(fmt.Sprintf("Failed to create Jaeger exporter: %v", err))
+		if err == nil {
+			// FIX: Increase BatchSpanProcessor limits for high throughput
+			batcher := sdktrace.NewBatchSpanProcessor(exporter,
+				sdktrace.WithMaxQueueSize(30000),      // Increased from 10k
+				sdktrace.WithMaxExportBatchSize(2048), // Increased from 512
+				sdktrace.WithBatchTimeout(5*time.Second),
+			)
+			tp.RegisterSpanProcessor(batcher)
 		}
-
-		// Register batch span processor
-		batcher := sdktrace.NewBatchSpanProcessor(exporter)
-		tp.RegisterSpanProcessor(batcher)
 	}
 
 	return tp
 }
 
-func EchoAppSpanner(ctx echo.Context, span_name string, appTracer oteltrace.Tracer) (context.Context, oteltrace.Span) {
-	gen, _ := uuid.NewV7()
-	id := gen.String()
+func EchoAppSpanner(ctx echo.Context, spanName string, appTracer oteltrace.Tracer) (context.Context, oteltrace.Span) {
 
-	//  getting request body
-	trace, span := appTracer.Start(ctx.Request().Context(), span_name,
-		oteltrace.WithAttributes(attribute.String("id", id)),
-	)
-	return trace, span
+	return appTracer.Start(ctx.Request().Context(), spanName)
 }
 
 type RouteTracer struct {

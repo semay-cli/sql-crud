@@ -14,14 +14,16 @@ import (
 	{{- if $break_3 }}
 	"github.com/google/uuid"
 	{{- end }}
-    "github.com/Masterminds/squirrel"
-	"{{ .ProjectName }}/{{ $.AppName }}/models"
+   	"{{ .ProjectName }}/{{ $.AppName }}/models"
+	"{{ .ProjectName }}/querybuilder"
 	 "database/sql"
    
 )
 
+
+
 // Create inserts a new {{.LowerName}}
-func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Context, posted_{{.LowerName}} *models.{{.Name}}Post, tx *sql.Tx) (*models.{{.Name}}, error) {
+func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Context, posted_{{.LowerName}} *models.{{.Name}}Post, tx *sql.Tx,out *models.{{.Name}}) error {
 
         {{- range .Fields}} {{- if .Post}}
             {{- if eq .Name "Password" }}
@@ -34,7 +36,11 @@ func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Co
             {{- end }}
         {{- end }}
 
-        qb := squirrel.Insert("{{.LowerName}}s").Columns(
+        isPG := s.DB.Dialector.Name() == "postgres"
+        qb := querybuilder.GetBuilder(isPG)
+        defer qb.Release()
+        
+        qb.Insert("{{.LowerName}}s").Columns(
         {{- $i := 0 -}}
             {{- range .Fields -}}
             {{- if and
@@ -47,7 +53,6 @@ func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Co
                 
             {{- end -}}
             {{- end -}}
-                ,"created_at",
         ).Values(
             {{- range .Fields}} {{- if .Post}}
             {{- if eq .Name "Password" }}
@@ -64,19 +69,18 @@ func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Co
                {{$.LowerName}}_uuid.String(),
             {{- end }}
         {{- end}}
-            squirrel.Expr("CURRENT_TIMESTAMP"),
-        ).Suffix("RETURNING {{.LowerName}}s.*")
+            
+        )
 
-         dialect :=s.DB.Dialector.Name()
-        // 1. Set the correct PlaceholderFormat for the specific DB
-        if dialect == "postgres" {
-            qb = qb.PlaceholderFormat(squirrel.Dollar)
-        } 
+        
+    // set created date
+	qb.SetExpr("created_at", "CURRENT_TIMESTAMP").
+        Suffix("RETURNING {{.LowerName}}s.*")
 
     // 3. Build SQL
 	query, args, err := qb.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build SQL: %v", err)
+		return fmt.Errorf("failed to build SQL: %v", err)
 	}
 
     // Execute the query using sqlc
@@ -90,36 +94,45 @@ func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Co
        &item.UpdatedAt,
        &item.CreatedAt,
 	)
-	return &item, err
+    if err != nil {
+        return err
+    }
+    if out != nil {
+        *out = item
+    }
+	return nil
 }
 
 
 // GetOne fetches a {{.LowerName}} by ID
-func (s *{{ .AppName | toPascalCase }}Repository) GetOne{{.Name}}(ctx context.Context, id string) (*models.{{.Name}}, error) {
+func (s *{{ .AppName | toPascalCase }}Repository) GetOne{{.Name}}(ctx context.Context, id string,out *models.{{.Name}}) (error) {
     // checking Cache if it exists
    	cacheKey := "{{.LowerName}}:" + id
 	if cached{{.Name}}, found := s.Cache.Get(cacheKey); found {
-		return cached{{.Name}}.(*models.{{.Name}}), nil
+		*out = *(cached{{.Name}}.(*models.{{.Name}}))
+        return nil
 	}
 
 
 	objID, err := strconv.Atoi(id)
 	if err != nil {
-		return nil, fmt.Errorf("invalid ID: %v", err)
+		return fmt.Errorf("invalid ID: %v", err)
 	}
+
+    isPG := s.DB.Dialector.Name() == "postgres"
+
     // Build the query
-    qb := squirrel.Select("{{.Name | toInitials}}.*").
-        From("{{.LowerName}}s {{.Name | toInitials}}").
-        Where(squirrel.Eq{"{{.Name | toInitials}}.id": objID})
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
     
-    // 3. Handle PostgreSQL vs SQLite/MySQL placeholders
-    if s.DB.Dialector.Name() == "postgres" {
-        qb = qb.PlaceholderFormat(squirrel.Dollar)
-    }
+    qb.Select("{{.Name | toInitials}}.*").
+            From("{{.LowerName}}s {{.Name | toInitials}}").
+            Where("{{.Name | toInitials}}.id= ?",objID)
+  
 
     query, args, err := qb.ToSql()
     if err != nil {
-        return nil, fmt.Errorf("failed to build SQL: %v", err)
+        return fmt.Errorf("failed to build SQL: %v", err)
     }
 
     // 4. Execute the query
@@ -136,39 +149,43 @@ func (s *{{ .AppName | toPascalCase }}Repository) GetOne{{.Name}}(ctx context.Co
 	)
 	
     if err != nil {
-		return nil, err
+		return  err
 	}
 
-    // Setting Cache before returning the {{.LowerName}}s
-    s.Cache.Set(cacheKey, &item)
+    if out != nil {
+		*out = item
+        cachedCopy := item
+		s.Cache.Set(cacheKey, &cachedCopy)
+	}
 
-	return &item, nil
+
+	return nil
 }
 
 {{ if gt (len .GetOneFields) 0 }}
 {{ range $i, $field := .GetOneFields }}
 
 // GetOne fetches a {{$.LowerName}} by {{ $field | getBase | toPascalCase }}
-func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}By{{ $field | getBase | toPascalCase }}(ctx context.Context, {{ $field | toSnakeCase }} string) (*models.{{$.Name}}, error) {
+func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}By{{ $field | getBase | toPascalCase }}(ctx context.Context, {{ $field | toSnakeCase }} string, out *models.{{$.Name}}) (error) {
     // checking Cache if it exists
    	cacheKey := "{{$.LowerName}}:" + {{ $field | toSnakeCase}}
 	if cached{{$.Name}}, found := s.Cache.Get(cacheKey); found {
-		return cached{{$.Name}}.(*models.{{$.Name}}), nil
+		*out = *(cached{{$.Name}}.(*models.{{$.Name}}))
+        return nil
 	}
 
+    isPG := s.DB.Dialector.Name() == "postgres"
     // Build the query
-    qb := squirrel.Select("{{$.Name | toInitials}}.*").
-        From("{{$.LowerName}}s {{$.Name | toInitials}}").
-        Where(squirrel.Eq{"{{ $field | getBase }}": {{ $field | toSnakeCase }}})
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
 
-   // 3. Handle PostgreSQL vs SQLite/MySQL placeholders
-    if s.DB.Dialector.Name() == "postgres" {
-        qb = qb.PlaceholderFormat(squirrel.Dollar)
-    }
+    qb.Select("{{$.Name | toInitials}}.*").
+        From("{{$.LowerName}}s {{$.Name | toInitials}}").
+        Where("{{$.Name | toInitials}}.{{ $field | getBase }}= ?",{{ $field | toSnakeCase }})
 
     query, args, err := qb.ToSql()
     if err != nil {
-        return nil, fmt.Errorf("failed to build SQL: %v", err)
+        return fmt.Errorf("failed to build SQL: %v", err)
     }
 
     // 4. Execute the query
@@ -184,38 +201,37 @@ func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}By{{ $field | ge
 	)
 	
     if err != nil {
-		return nil, err
+		return  err
 	}
 
-    // Setting Cache before returning the {{$.LowerName}}s
-    s.Cache.Set(cacheKey, &item)
+    if out != nil {
+		*out = item
+        cachedCopy := item
+		s.Cache.Set(cacheKey, &cachedCopy)
+	}
 
-	return &item, nil
+
+	return nil
 }
 {{ end }}{{- end }}
 
 // Get returns {{.LowerName}}s with pagination and search
-func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]any) ([]models.{{.Name}}Get, uint, error) {
-    qb := squirrel.Select("{{.Name | toInitials}}.*", "count(*) OVER() as total_count").
-        From("{{.LowerName}}s {{.Name | toInitials}}")
-    dialect :=s.DB.Dialector.Name()
-
-    // 1. Set the correct PlaceholderFormat for the specific DB
-    if dialect == "postgres" {
-        qb = qb.PlaceholderFormat(squirrel.Dollar)
-    } else {
-        qb = qb.PlaceholderFormat(squirrel.Question)
-    }
+func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]any, out *[]models.{{.Name}}Get) (uint, error) {
+    isPG := s.DB.Dialector.Name() == "postgres" 
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
     
+    qb.Select("{{.Name | toInitials}}.*", "count(*) OVER() as total_count").
+        From("{{.LowerName}}s {{.Name | toInitials}}")
+   
+
     {{ if gt (len .SearchFields) 0 }}
-    var likeOp string
-    // Detect dialect
-    switch dialect {
-    case "postgres":
-        likeOp = " ILIKE ?" // Postgres supports ILIKE for case-insensitive search
-    default:
-        likeOp = " LIKE ?" // MySQL, SQLite, SQLServer, etc.
-    }
+    // Dialect-aware LIKE operator
+	likeExpr := " ILIKE CONCAT('%', ?::text, '%')"
+	if !isPG {
+		likeExpr = " LIKE '%' || ? || '%'"
+	}
+
     {{- end}}
 
     {{- range $i, $field := $.SearchFields }}
@@ -223,7 +239,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Cont
     {{ $field | getBase }}, ok := searchTerm["{{ $field | getBase }}"]
     {{- if $field | isValid }} 
         if ok && searchTerm["{{ $field | getBase }}"] != "" {
-           qb = qb.Where("{{$.Name | toInitials}}.{{ $field | getBase }}" + likeOp,"%"+{{ $field | getBase }}.(string)+"%")  // You can set it to "" or leave it as nil, depending on your query's COALESCE logic
+           qb = qb.Where("{{$.Name | toInitials}}.{{ $field | getBase }}" + likeExpr,{{ $field | getBase }})  // You can set it to "" or leave it as nil, depending on your query's COALESCE logic
         }    
     {{- else }}
         if ok && searchTerm["{{ $field | getBase }}"] != nil && {{ $field | getBase }} != "" {
@@ -234,26 +250,29 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Cont
 
     // Apply pagination with LIMIT and OFFSET
 	qb = qb.OrderBy("id DESC").
-		Limit(uint64(pagination.Size)).
-		Offset(uint64((pagination.Page - 1) * pagination.Size))
+		Limit(pagination.Size).
+		Offset((pagination.Page - 1) * pagination.Size)
 
 	// Build the query string and parameters
 	query, args, err := qb.ToSql()
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to build SQL query: %v", err)
+		return  0, fmt.Errorf("failed to build SQL query: %v", err)
 	}
+
+    // Reset the slice length to 0 (but keep the pooled capacity)
+	finalitems := (*out)[:0]
 
 	// Execute the query using sqlc
 	rows, err := s.SQLC.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
     defer rows.Close()
 
-    items := []models.{{.Name}}Get{}
+   
+    item := models.{{.Name}}GetPool.Get()
     var totalCount int64
     for rows.Next() {
-        var item models.{{.Name}}
         err := rows.Scan(
           {{- range .Fields}}{{- if ne .DBType  "None"}} 
             &item.{{.Name}},
@@ -262,32 +281,31 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Cont
           &item.CreatedAt,
             &totalCount,
         )
-        if err != nil {
-            return nil, 0, err
-        }
-    
-        items = append(items, *item.ToGet())
-    }
 
-	return items,uint(totalCount), nil
+        finalitems = append(finalitems, *item)
+        if err != nil {
+            models.{{.Name}}GetPool.Put(item)
+            return 0, err
+        }
+        item.Reset()
+    }
+    models.{{.Name}}GetPool.Put(item)
+    *out = finalitems
+
+	return uint(totalCount), nil
 }
 
 
 
 // Update modifies a {{.Name}}s by ID
-func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Context, existing *models.{{.Name}} ,patch_{{.LowerName}} *models.{{.Name}}Patch,tx  *sql.Tx) (*models.{{.Name}}, error) {
+func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Context, id string ,patch_{{.LowerName}} *models.{{.Name}}Patch,tx  *sql.Tx, out *models.{{.Name}}) (error) {
+    isPG := s.DB.Dialector.Name() == "postgres"
 
-	qb := squirrel.Update("{{ .LowerName}}s")
-
-    dialect :=s.DB.Dialector.Name()
-
-    // 1. Set the correct PlaceholderFormat for the specific DB
-    if dialect == "postgres" {
-        qb = qb.PlaceholderFormat(squirrel.Dollar)
-    } else {
-        qb = qb.PlaceholderFormat(squirrel.Question)
-    }
-
+	qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
+    
+    qb.Update("{{ .LowerName}}s")
+    
     {{- range .Fields}} {{- if .Patch}}
     {{- if eq .Name "Password" }}
     if patch_{{$.LowerName}}.{{.Name}} != nil {
@@ -310,16 +328,16 @@ func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Co
     {{- end}}
 
 
-	// Include the `updated_at` column (set to CURRENT_TIMESTAMP)
-	qb = qb.Set("updated_at", squirrel.Expr("CURRENT_TIMESTAMP"))
 
-    // 3. Apply Where and Suffix last
-	qb = qb.Where(squirrel.Eq{"id": existing.ID}).Suffix("RETURNING *")
+	qb.SetExpr("updated_at", "CURRENT_TIMESTAMP").
+		Where("id = ?", id).
+		Suffix("RETURNING *")
+
     
     // Build the query string and parameters
 	query, args, err := qb.ToSql()
 	if err != nil {
-		return nil,fmt.Errorf("failed to build SQL query: %v", err)
+		return fmt.Errorf("failed to build SQL query: %v", err)
 	}
 
     // Execute the query using sqlc
@@ -335,7 +353,11 @@ func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Co
 	)
   
     if err != nil {
-        return nil, err
+        return  err
+    }
+
+    if out != nil {
+        *out = item
     }   
 
     // Removing Cache if update success
@@ -346,23 +368,24 @@ func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Co
     s.Cache.Delete("user:login:" + email)
     {{- end }}
 
-	return &item, nil
+	return nil
 }
 
 
 // Delete removes a {{.LowerName}} by ID
-func (s *{{ .AppName | toPascalCase }}Repository) Delete{{.Name}}(ctx context.Context, existing *models.{{.Name}}, tx *sql.Tx) error {
+func (s *{{ .AppName | toPascalCase }}Repository) Delete{{.Name}}(ctx context.Context, id string, tx *sql.Tx) error {
 
 
-    {{.LowerName}}:= *existing
     // Build the delete query
-    qb := squirrel.Delete("{{.LowerName}}s").Where(squirrel.Eq{"id": {{.LowerName}}.ID})
+    isPG := s.DB.Dialector.Name() == "postgres"
 
-    // 2. Handle PostgreSQL vs SQLite/MySQL placeholders
-	if s.DB.Dialector.Name() == "postgres" {
-		qb = qb.PlaceholderFormat(squirrel.Dollar)
-	}
+	qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
+        
+    qb.Delete("{{.LowerName}}s").Where("id", id){{- if and (eq .AppName .AuthAppName) (eq .Name "User") }}.
+         Suffix("RETURNING email") {{- end }}
 
+   
 	// 3. Generate SQL string and arguments
 	query, args, err := qb.ToSql()
 	if err != nil {
@@ -370,16 +393,26 @@ func (s *{{ .AppName | toPascalCase }}Repository) Delete{{.Name}}(ctx context.Co
 	}
 
 	// 4. Execute using the provided transaction (tx)
-	_, err = tx.ExecContext(ctx, query, args...)
+   
+
+    {{- if and (eq .AppName .AuthAppName) (eq .Name "User") }}
+    var email string
+	err = tx.QueryRowContext(ctx, query, args...).
+        Scan(&email)
 	if err != nil {
 		return err
 	}
+    {{- else }}
+    _,err = tx.ExecContext(ctx, query, args...)
+    if err != nil {
+        return err
+        }
+    {{- end}}
 
     // Removing Cache if delete success
-    cacheKey := "{{.LowerName}}:" + strconv.FormatUint(uint64({{.LowerName}}.ID),10)
+    cacheKey := "{{.LowerName}}:" + id
     s.Cache.Delete(cacheKey)
     {{- if and (eq .AppName .AuthAppName) (eq .Name "User") }}
-    email := user.Email
     s.Cache.Delete("user:login:" + email)
     {{- end }}
 

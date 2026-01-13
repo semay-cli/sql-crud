@@ -1,0 +1,56 @@
+
+package {{ .AppName | replaceString }}
+//	@title			Swagger {{.AppName }} API
+//	@version		0.1
+//	@description	This is {{.AppName }} API OPENAPI Documentation.
+//	@termsOfService	http://swagger.io/terms/
+//  @BasePath  /api/v1
+
+//	@securityDefinitions.apikey	ApiKeyAuth
+//	@in							header
+//	@name						X-APP-TOKEN
+//	@description				Description for what is this security definition being used
+
+//	@securityDefinitions.apikey Refresh
+//	@in							header
+//	@name						X-REFRESH-TOKEN
+//	@description				Description for what is this security definition being used
+
+import (
+	"{{.ProjectName}}/{{.AppName}}/controllers"
+	"github.com/gofiber/fiber/v3"
+	
+)
+
+
+//  Please Note the sequence you mount the middlewares
+func SetupRoutes(app *fiber.App,  ctrls *controllers.{{ .AppName | toPascalCase }}Controller) {
+	  
+	// then authentication middlware
+	gapp := app.Group("/api/v1/{{.AppName | replaceString}}")
+
+
+	{{ if eq .AuthAppName .CurrentAppName }}
+	gapp.Post("/login", ctrls.Login).Name("login")
+	gapp.Get("/user/details", ctrls.GetUserDetails).Name("user_details")
+	{{- end}}
+
+	{{- range .Models}}
+	gapp.Get("/{{.LowerName}}", ctrls.Get{{.Name}}s).Name("{{.AppName | replaceString}}_can_view_{{.LowerName}}")
+	gapp.Get("/{{.LowerName}}/:{{.LowerName}}_id", ctrls.Get{{.Name}}ByID).Name("{{.AppName | replaceString}}_can_view_{{.LowerName}}")
+	gapp.Post("/{{.LowerName}}", ctrls.Post{{.Name}}).Name("{{.AppName | replaceString}}_can_add_{{.LowerName}}")
+	gapp.Patch("/{{.LowerName}}/:{{.LowerName}}_id", ctrls.Patch{{.Name}}).Name("{{.AppName | replaceString}}_can_change_{{.LowerName}}")
+	gapp.Delete("/{{.LowerName}}/:{{.LowerName}}_id", ctrls.Delete{{.Name}}).Name("{{.AppName | replaceString}}_can_delete_{{.LowerName}}")
+
+	{{range .Relations}}
+	gapp.Post("/{{.LowerParentName}}{{.LowerFieldName}}/:{{.LowerFieldName}}_id/:{{.LowerParentName}}_id",ctrls.Add{{.FieldName}}To{{.ParentName}}).Name ("{{.AppName | replaceString}}_can_add_{{.LowerFieldName}}")
+	gapp.Delete("/{{.LowerParentName}}{{.LowerFieldName}}/:{{.LowerFieldName}}_id/:{{.LowerParentName}}_id",ctrls.Delete{{.FieldName}}From{{.ParentName}}).Name ("{{.AppName | replaceString}}_can_delete_{{.LowerFieldName}}")
+	gapp.Get("/{{.LowerParentName}}{{.LowerFieldName}}/:{{.LowerParentName}}_id",ctrls.Get{{.FieldName}}sOf{{.ParentName}}s).Name("{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}")
+	gapp.Get("/{{.LowerFieldName}}noncomplement{{.LowerParentName}}/:{{.LowerParentName}}_id",ctrls.GetAll{{.FieldName}}sOf{{.ParentName}}s).Name("{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}complement")
+	gapp.Get("/{{.LowerFieldName}}complement{{.LowerParentName}}/:{{.LowerParentName}}_id",ctrls.Get{{.FieldName}}Complement{{.ParentName}}s).Name("{{.AppName | replaceString}}_can_view_{{.LowerFieldName}}complement")
+	{{end}}
+
+	{{- end}}
+
+
+}

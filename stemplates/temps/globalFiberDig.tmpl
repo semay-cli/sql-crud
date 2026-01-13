@@ -1,0 +1,277 @@
+package manager
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"time"
+
+
+	{{- range .AppNames}}
+	{{ . | replaceString }}"{{$.ProjectName}}/{{ . }}"
+	{{ . | replaceString }}_repo "{{$.ProjectName}}/{{ . }}/repository"
+	{{ . | replaceString }}_svc "{{$.ProjectName}}/{{ . }}/services"
+	{{ . | replaceString }}_ctrl "{{$.ProjectName}}/{{ . }}/controllers"
+	{{- end }}
+
+	"{{.ProjectName}}/cache"
+	"{{.ProjectName}}/configs"
+	"{{.ProjectName}}/logs"
+	"{{.ProjectName}}/crons"
+	"{{.ProjectName}}/database"
+	"{{.ProjectName}}/observe"
+
+	
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/limiter"
+	"github.com/gofiber/fiber/v3/middleware/recover"
+	"github.com/gofiber/fiber/v3/middleware/static"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/robfig/cron/v3"
+	"github.com/gofiber/swagger"
+	"github.com/spf13/cobra"
+	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.uber.org/dig"
+	"gorm.io/gorm"
+)
+
+var (
+	app_otel string
+	app_tls  string
+
+	echocli = &cobra.Command{
+		Use:   "run",
+		Short: "Run Development server",
+		Long:  "Run development server",
+		Run: func(cmd *cobra.Command, args []string) {
+			container := buildContainer()
+			err := container.Invoke(func(deps struct {
+				dig.In
+				App                *fiber.App
+				Cfg                *configs.EnvConfig
+				Logger             *logs.Logger
+				{{- range .AppNames}}
+				{{ . | toPascalCase }}Ctrl      *{{ . | replaceString }}_ctrl.{{ . | toPascalCase }}Controller           `name:"{{ . | replaceString }}_controller"`
+
+				{{- end}}
+				Scheduler          *crons.ScheduledService
+			}) {
+				// Register routes with their respective controllers
+				{{- range .AppNames}}
+				{{ . | replaceString }}.SetupRoutes(deps.App, deps.{{ . | toPascalCase }}Ctrl)
+				{{- end}}
+
+				// starting shceduled tasks
+				deps.Scheduler.Start()
+
+				// starting server
+				go startServer(deps.App, deps.Cfg,deps.Logger)
+
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				waitForShutdown(deps.App, ctx,deps.Logger)
+
+				defer deps.Logger.Sync()
+			})
+			if err != nil {
+				fmt.Errorf("Error starting application: %v", err)
+			}
+		},
+	}
+)
+
+
+
+// ----------------- Fiber App Setup -----------------
+func NewFiberApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrace.Tracer, prom *prometheus.Registry) *fiber.App {
+	//initalize 
+	app := fiber.New()
+
+	// Recovery middleware to catch panics
+	app.Use(recover.New())
+
+	// Full chain middleware: CORS, headers, tracing, etc.
+	app.Use(FullChainMiddleware(appTracer))
+
+	//zap  logger
+	app.Use(FiberZapLogger(logger))
+
+	// Rate limiting
+	rateLimit, _ := strconv.ParseFloat(cfg.GetOrDefault("RATE_LIMIT_PER_SECOND", "50000"), 64)
+	app.Use(limiter.New(limiter.Config{
+		Max:        int(rateLimit),
+		Expiration: time.Second,
+	}))
+
+	// Prometheus metrics
+	observe.InitProm(prom, cfg)
+
+
+
+	// Open API Documentation
+	{{- range .AppNames}}
+	//  {{ . }} Swagger Docs
+	app.Get("/{{ . | replaceString}}/docs/doc.json", static.New("./{{ . }}/docs/swagger.json"))
+	// Serve {{ . | replaceString }} docs
+	app.Get("/{{ . | replaceString }}/docs/*", swagger.New(swagger.Config{
+		InstanceName: "{{ . | replaceString }}",
+		URL:          "/{{ . | replaceString }}/docs/doc.json", // Match the served JSON file
+	}))
+	{{- end }}
+
+	{{-  if eq .AuthAppType  "standalone" }}
+	app.Get("/", static.New("./dist/django_admin_ui"))
+
+	app.Get("/admin/*", func(ctx fiber.Ctx) error {
+		return ctx.SendFile("./dist/django_admin_ui/index.html")
+	}).Name("Admin_UI")
+
+	{{- end }}	
+	{{- if eq .AuthAppType  "sso" }}
+	app.Get("/*", static.New("./dist/sso_admin_ui"))
+
+	app.Get("/admin/*", func(ctx fiber.Ctx) error {
+		return ctx.SendFile("./dist/sso_admin_ui/index.html")
+	}).Name("Admin_UI")
+	{{- end }}
+	
+
+	return app
+}
+
+
+func waitForShutdown(app *fiber.App, ctx context.Context, logger *logs.Logger) {
+	<-ctx.Done()
+	logger.Info("Gracefully shutting down...")
+	if err := app.Shutdown(); err != nil {
+		logger.Error("Error during server shutdown:", err)
+	}
+	logger.Info("Shutdown complete.")
+}
+
+func startServer(app *fiber.App, cfg *configs.EnvConfig, logger *logs.Logger) {
+	addr := ":" + cfg.Get("HTTP_PORT")
+	if cfg.GetOrDefault("APP_TLS", "off") == "on" {
+		logger.Fatal("TLS start not implemented")
+	} else {
+		logger.Info("Starting server on", "addr", addr)
+		if err := app.Listen(addr); err != nil {
+			logger.Fatal("Server failed:", err)
+		}
+	}
+}
+
+// ---- Dependency Injection Container ----
+
+func buildContainer() *dig.Container {
+	container := dig.New()
+
+	mustProvide := func(err error) {
+		if err != nil {
+			panic(fmt.Errorf("dig provide failed: %w", err))
+		}
+	}
+
+	// Provide configuration
+	mustProvide(container.Provide(configs.NewEnvConfig))
+
+	// zap Logger
+	mustProvide(container.Provide(logs.NewZapLogger ))
+
+	// Provide Cron engine
+	container.Provide(func() *cron.Cron {
+		return cron.New()
+	})
+
+	// Initialize otel Tracer
+	mustProvide(container.Provide(observe.NewAppTracer))
+
+	// Provide cache
+	mustProvide(container.Provide(cache.NewCacheService))
+
+	// Provide Prometheus Registry
+	mustProvide(container.Provide(func() *prometheus.Registry {
+		return prometheus.NewRegistry()
+	}))
+
+	{{ range .AppNames}}
+	// Provide named DBs
+	mustProvide(container.Provide(func(cfg *configs.EnvConfig,logger *logs.Logger) (*gorm.DB, error) {
+		return database.ReturnSession("{{ . | replaceString }}", cfg, logger)
+	}, dig.Name("{{ . | replaceString }}_db")))
+	{{- end }}
+
+
+	{{ range .AppNames}}
+
+	// Provide {{ . | replaceString }} repository
+	mustProvide(container.Provide(func(in struct {
+		dig.In
+		DB    *gorm.DB `name:"{{ . | replaceString }}_db"`
+		Cache *cache.CacheService
+		Cfg   *configs.EnvConfig
+	}) *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository  {
+		return {{ . | replaceString }}_repo.InitRepository(in.DB, in.Cache, in.Cfg)
+	}, dig.Name("{{ . | replaceString }}_repo")))
+
+	{{- end }}
+
+
+	{{ range .AppNames}}
+
+    	// Provide {{ . | replaceString }} service
+    	mustProvide(container.Provide(func(in struct {
+    		dig.In
+    		DB    *gorm.DB `name:"{{ . | replaceString }}_db"`
+    		Cache *cache.CacheService
+    		Cfg   *configs.EnvConfig
+    		Repo  *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository        `name:"{{ . | replaceString }}_repo"`
+    	}) *{{ . | replaceString }}_svc.{{ . | toPascalCase }}Service  {
+    		return {{ . | replaceString }}_svc.InitService(in.DB, in.Cache, in.Cfg,in.Repo)
+    	}, dig.Name("{{ . | replaceString }}_svc")))
+
+    	{{- end }}
+
+	{{ range .AppNames}}
+
+	// Provide controllers
+	mustProvide(container.Provide(func(in struct {
+		dig.In
+		Svc *{{ . | replaceString }}_svc.{{ . | toPascalCase }}Service `name:"{{ . | replaceString }}_svc"`
+	}) *{{ . | replaceString }}_ctrl.{{ . | toPascalCase }}Controller {
+		return {{ . | replaceString }}_ctrl.New{{ . | toPascalCase }}Controller(in.Svc)
+	}, dig.Name("{{ . | replaceString }}_controller")))
+	{{- end }}
+
+	//  Intitialize chron service
+	mustProvide(container.Provide(func(in struct {
+		dig.In
+		Crn   *cron.Cron
+		Cfg   *configs.EnvConfig
+		{{- range .AppNames}}
+		{{ . | toPascalCase }}Repo *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository           `name:"{{ . | replaceString }}_repo"`
+	{{- end }}
+	}) *crons.ScheduledService {
+		return crons.NewScheduledService(in.Crn, in.Cfg,
+	{{- range .AppNames}}
+		in.{{ . | toPascalCase }}Repo,
+	{{- end }}
+		)
+	}))
+
+
+	// Provide Echo app
+	mustProvide(container.Provide(func(cfg *configs.EnvConfig,  appTracer oteltrace.Tracer, prom *prometheus.Registry, logger *logs.Logger) *fiber.App {
+		return NewFiberApp	(cfg,logger ,appTracer, prom)
+	}))
+
+	return container
+}
+
+// ---- CLI Flags ----
+
+func init() {
+	echocli.Flags().StringVar(&app_otel, "otel", "off", "Enable OpenTelemetry tracing (on/off)")
+	echocli.Flags().StringVar(&app_tls, "tls", "off", "Enable TLS (on/off)")
+	goFrame.AddCommand(echocli)
+}

@@ -33,7 +33,7 @@
             "name": "Active",
             "type": "bool",
             "annotation": "gorm:\"default:true; constraint:not null;\" json:\"active\"",
-            "curd_flag": "true$false$true$true$false$false",
+            "curd_flag": "true$true$true$true$false$false",
             "db_type" : "BOOLEAN NOT NULL DEFAULT TRUE"
           },
           {
@@ -54,7 +54,7 @@
             "name": "AppID",
             "type": "sql.NullInt64",
             "annotation": "gorm:\"foreignkey:AppID OnDelete:SET NULL\" json:\"app_id,omitempty\" swaggertype:\"number\"",
-            "curd_flag": "false$false$false$false$true$false",
+            "curd_flag": "true$false$false$false$true$false",
             "db_type": "INTEGER REFERENCES apps(id) ON DELETE SET NULL"
           }
         ]
@@ -331,7 +331,7 @@
             "name": "ScopeID",
             "type": "sql.NullInt64",
             "annotation": "gorm:\"foreignkey:ScopeID OnDelete:SET NULL\" json:\"scope_id,omitempty\" swaggertype:\"number\"",
-            "curd_flag": "false$false$false$false$true$false",
+            "curd_flag": "true$false$false$false$true$false",
             "db_type" : "INTEGER REFERENCES scopes(id) ON DELETE SET NULL"
           }
         ]

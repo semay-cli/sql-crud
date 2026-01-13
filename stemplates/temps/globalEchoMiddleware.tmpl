@@ -2,108 +2,167 @@
 package manager
 
 import (
-	"fmt"
+	"sync"
+
 	"{{.ProjectName}}/observe"
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
-	"strings"
-	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
+
 var AppRouteNames map[string]string
 
-func GetApplicationRoutes(app *echo.Echo) {
-	// Lock the Mutex to ensure safe access to AppRouteNames
-
-	AppRouteNames = make(map[string]string)
-	for _, route := range app.Routes() {
-		routeName := route.Name
-		if route.Name == "" {
-			// Skip routes without a name
-			continue
-		}
-		AppRouteNames[route.Path] = routeName
-	}
-}
-
-// SetRouteName header based on path
-func SetRouteNameHeader(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(contx echo.Context) error {
-
-		routeName, exists := AppRouteNames[contx.Path()]
-
-		// If the route name doesn't exist in the map, set it to "not-set"
-		if !exists {
-			routeName = "not-set"
-		}
-
-		// If the x-app-token header is missing, set a default value
-		contx.Request().Header.Set("route-name", routeName)
-
-		// Continue processing the request
-		return next(contx)
-	}
-}
-
-func NextAuthValidator(key string, ctx echo.Context) (bool, error) {
-
-	if ctx.Path() == "/api/v1/blue_auth/login" || ctx.Path() == "/api/v1/blue_auth/stats" {
-		return true, nil
-	}
-    ctx.Logger().Info("Path: ", ctx.Path())
-    // ctx.Logger().Info("Key: ", key)
-
-	//  You have to fix the NextAuthValidator function, it will let all values pass
-	// using required role access logic
-	return true, nil
-}
-
-// AddAppTokenIfMissing is a middleware that checks if the x-app-token header is present in the request. so that the login route can work
-func AddAppTokenIfMissing(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(contx echo.Context) error {
-		// Check if x-app-token header exists
-		appToken := contx.Request().Header.Get("x-app-token")
-
-		// If the x-app-token header is missing, set a default value
-		if appToken == "" {
-			contx.Request().Header.Set("x-app-token", "login")
-		}
-
-		// Continue processing the request
-		return next(contx)
-	}
-}
-
 func MountGlobalMiddleware(app *echo.Echo) {
-	// Mount the middleware
-	app.Use(SetRouteNameHeader)
-	app.Use(AddAppTokenIfMissing)
-	app.Use(middleware.KeyAuthWithConfig(middleware.KeyAuthConfig{
-		KeyLookup: "header:x-app-token",
-		Validator: NextAuthValidator,
-	}))
 
+}
+
+// Create a pool for your RouteTracer wrapper
+var tracerPool = sync.Pool{
+	New: func() any {
+		return &observe.RouteTracer{}
+	},
 }
 
 func NewOTelEchoSpanStarter(appTracer oteltrace.Tracer) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(ctx echo.Context) error {
-			routeName := ctx.Path() + "_" + strings.ToLower(ctx.Request().Method)
-			trace, span := observe.EchoAppSpanner(ctx, fmt.Sprintf("%v-root", routeName), appTracer)
-			ctx.Set("tracer", &observe.RouteTracer{Tracer: trace, Span: span})
+			// 1. Path lookup is fine, but handle the "unnamed" case with a constant
+			spanName := ctx.Path()
+			if spanName == "" {
+				spanName = "unnamed-route"
+			}
+
+			// 2. Start the span. Note: appTracer.Start is already optimized internally.
+			traceCtx, span := appTracer.Start(ctx.Request().Context(), spanName)
+
+			// 3. Acquire tracer from pool
+			rt := tracerPool.Get().(*observe.RouteTracer)
+			rt.Tracer = traceCtx
+			rt.Span = span
+
+			// 4. CRITICAL FIX: Avoid ctx.Set("tracer", rt)
+			// Instead of putting it in the Echo Map (which allocates),
+			// wrap the Request with the new trace context directly.
+			req := ctx.Request()
+			ctx.SetRequest(req.WithContext(traceCtx))
 
 			err := next(ctx)
-			if err != nil {
-				return err
+
+			// 5. Cleanup
+			span.End()
+
+			rt.Tracer = nil
+			rt.Span = nil
+			tracerPool.Put(rt)
+
+			return err
+		}
+	}
+}
+
+// 1. Define this once in your manager or observe package
+type AppContext struct {
+	echo.Context
+	Tracer *observe.RouteTracer
+}
+
+// 1. Create a pool for the AppContext wrapper
+var appContextPool = sync.Pool{
+	New: func() any {
+		return &AppContext{}
+	},
+}
+
+func FullChainMiddleware(appTracer oteltrace.Tracer) echo.MiddlewareFunc {
+	// Define constants for values used in headers to avoid runtime string creation
+	const (
+		hdrAllowOrigin  = "Access-Control-Allow-Origin"
+		hdrAllowMethods = "Access-Control-Allow-Methods"
+		hdrAllowHeaders = "Access-Control-Allow-Headers"
+		hdrMaxAge       = "Access-Control-Max-Age"
+		hdrAppToken     = "X-App-Token"
+		hdrRouteName    = "Route-Name"
+		valMethods      = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+		valMaxAge       = "86400"
+		valNotSet       = "not-set"
+	)
+
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			path := c.Path()
+
+			// 2. CHECK BYPASS FIRST
+			// Do this before any allocations or pool fetches to save CPU
+			if path == "/api/v1/blue_auth/login" || path == "/api/v1/blue_auth/stats" {
+				return next(c)
 			}
 
-			status := ctx.Response().Status
-			if status >= 400 {
-				span.SetAttributes(attribute.String("response", fmt.Sprintf("%v", status)))
-				span.RecordError(fmt.Errorf("HTTP error: %d", status))
+			req := c.Request()
+			resHdr := c.Response().Header()
+
+			// 3. RECYCLE: Borrow AppContext from pool
+			ac := appContextPool.Get().(*AppContext)
+			ac.Context = c
+
+			// 4. PREPARE CLEANUP
+			// We use a manual cleanup at the end or defer.
+			// In high-load, manual is slightly faster than defer.
+
+			// 5. CORS - Direct Header Manipulation
+			// Using .Set() is more optimized than map assignment for the net/http package
+			resHdr.Set(hdrAllowOrigin, "*")
+			resHdr.Set(hdrAllowMethods, valMethods)
+			resHdr.Set(hdrAllowHeaders, "*")
+			resHdr.Set(hdrMaxAge, valMaxAge)
+
+			if req.Method == "OPTIONS" {
+				// Return ac to pool before exiting
+				ac.Context = nil
+				appContextPool.Put(ac)
+				return c.NoContent(204)
 			}
+
+			// 6. OTel START
+			spanName := path
+			if spanName == "" {
+				spanName = "unnamed-route"
+			}
+
+			traceCtx, span := appTracer.Start(req.Context(), spanName)
+
+			rt := tracerPool.Get().(*observe.RouteTracer)
+			rt.Tracer = traceCtx
+			rt.Span = span
+			ac.Tracer = rt
+
+			// 7. REQUEST HEADERS
+			// Only set if not already present
+			if req.Header.Get(hdrAppToken) == "" {
+				req.Header.Set(hdrAppToken, "login")
+			}
+
+			routeName := valNotSet
+			if name, exists := AppRouteNames[path]; exists {
+				routeName = name
+			}
+			req.Header.Set(hdrRouteName, routeName)
+
+			// 8. EXECUTE NEXT
+			err := next(ac)
+
+			// 9. FINAL CLEANUP (Manual return to pool)
 			span.End()
-			return nil
+
+			// Clear RouteTracer and return to pool
+			rt.Tracer = nil
+			rt.Span = nil
+			tracerPool.Put(rt)
+
+			// Clear AppContext and return to pool
+			ac.Context = nil
+			ac.Tracer = nil
+			appContextPool.Put(ac)
+
+			return err
 		}
 	}
 }

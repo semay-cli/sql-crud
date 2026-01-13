@@ -1,0 +1,46 @@
+package manager
+
+import (
+	"bytes"
+	"encoding/json"
+	"sync"
+
+	"github.com/labstack/echo/v4"
+)
+
+type PooledJSONSerializer struct {
+	pool sync.Pool
+}
+
+func NewPooledJSONSerializer() *PooledJSONSerializer {
+	return &PooledJSONSerializer{
+		pool: sync.Pool{
+			New: func() any {
+				return new(bytes.Buffer)
+			},
+		},
+	}
+}
+
+func (s *PooledJSONSerializer) Serialize(c echo.Context, i any, indent string) error {
+	buf := s.pool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer s.pool.Put(buf)
+
+	enc := json.NewEncoder(buf)
+	if indent != "" {
+		enc.SetIndent("", indent)
+	}
+
+	if err := enc.Encode(i); err != nil {
+		return err
+	}
+
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
+	_, err := c.Response().Write(buf.Bytes())
+	return err
+}
+
+func (s *PooledJSONSerializer) Deserialize(c echo.Context, i any) error {
+	return json.NewDecoder(c.Request().Body).Decode(i)
+}

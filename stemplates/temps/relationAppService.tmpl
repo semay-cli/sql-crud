@@ -42,31 +42,31 @@ func (s *{{ .AppName | toPascalCase }}Service) Remove{{ .ParentName}}From{{.Fiel
 	return nil
 }
 
-func (s *{{ .AppName | toPascalCase }}Service) Get{{.ParentName}}{{.FieldName}}s(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, pagination models.Pagination) ([]models.{{.FieldName}}Get, uint, error) {
+func (s *{{ .AppName | toPascalCase }}Service) Get{{.ParentName}}{{.FieldName}}s(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, pagination models.Pagination,out *[]models.{{.FieldName}}Get) (uint, error) {
 
-	{{.LowerFieldName}}s, total, err := s.Repo.Get{{.ParentName}}{{.FieldName}}s(ctx, {{.ParentName | toLowerCaseName}}ID, pagination)
+	total, err := s.Repo.Get{{.ParentName}}{{.FieldName}}s(ctx, {{.ParentName | toLowerCaseName}}ID, pagination,out)
     if err != nil {
-        return nil, 0, fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
+        return 0, fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
     }
-	return {{.LowerFieldName}}s, uint(total), nil
+	return uint(total), nil
 }
 // #########################
 // No Pagination Services###
 // #########################
 
-func (s *{{ .AppName | toPascalCase }}Service) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string) ([]models.{{.FieldName}}Get, error) {
+func (s *{{ .AppName | toPascalCase }}Service) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, out *[]models.{{.FieldName}}Get) error {
 
-	{{.LowerFieldName}}s,err := s.Repo.GetAll{{.FieldName}}sFor{{.ParentName}}(ctx, {{.ParentName | toLowerCaseName}}ID)
+	err := s.Repo.GetAll{{.FieldName}}sFor{{.ParentName}}(ctx, {{.ParentName | toLowerCaseName}}ID,out)
     if err != nil {
-        return nil, fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
+        return fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
     }
-	return {{.LowerFieldName}}s, nil
+	return  nil
 }
 
-func (s *{{ .AppName | toPascalCase }}Service) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string) ([]models.{{.FieldName}}Get, error) {
-	{{.LowerFieldName}}s,err := s.Repo.GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx, {{.ParentName | toLowerCaseName}}ID)
+func (s *{{ .AppName | toPascalCase }}Service) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string,out *[]models.{{.FieldName}}Get) error {
+	err := s.Repo.GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx, {{.ParentName | toLowerCaseName}}ID,out)
     if err != nil {
-        return nil, fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
+        return fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
     }
-	return {{.LowerFieldName}}s, nil
+	return  nil
 }

@@ -1,0 +1,39 @@
+package common
+
+import "sync"
+
+// Resetter is an interface for structs that can clear their own data
+type Resetter interface {
+	Reset()
+}
+
+type ItemPool[T any] struct {
+	pool sync.Pool
+}
+
+func NewItemPool[T any]() *ItemPool[T] {
+	return &ItemPool[T]{
+		pool: sync.Pool{
+			New: func() any {
+				return new(T)
+			},
+		},
+	}
+}
+
+func (p *ItemPool[T]) Get() *T {
+	return p.pool.Get().(*T)
+}
+
+func (p *ItemPool[T]) Put(item *T) {
+	// If the item implements Resetter, clear it. 
+	// Otherwise, we can use reflection or a simple zero-assignment.
+	if r, ok := any(item).(Resetter); ok {
+		r.Reset()
+	} else {
+		// Fallback: overwrite with a zero-value T
+		var zero T
+		*item = zero
+	}
+	p.pool.Put(item)
+}

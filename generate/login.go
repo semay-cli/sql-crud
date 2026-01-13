@@ -11,3 +11,13 @@ func GenerateSSOLogin(data stemplates.ProjectSetting) {
 	stemplates.WriteTemplateToFileSetting("services/login_svc.go", tmplService, data)
 	stemplates.WriteTemplateToFileSetting("controllers/login_controller.go", tmplController, data)
 }
+
+func GenerateSSOLoginFiber(data stemplates.ProjectSetting) {
+	tmplService := stemplates.LoadTemplate("loginService")
+	tmplRepository := stemplates.LoadTemplate("loginRepository")
+	tmplController := stemplates.LoadTemplate("loginControlFiber")
+
+	stemplates.WriteTemplateToFileSetting("repository/login_repo.go", tmplRepository, data)
+	stemplates.WriteTemplateToFileSetting("services/login_svc.go", tmplService, data)
+	stemplates.WriteTemplateToFileSetting("controllers/login_controller.go", tmplController, data)
+}

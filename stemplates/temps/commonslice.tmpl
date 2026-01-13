@@ -1,0 +1,30 @@
+package common
+
+import "sync"
+
+// SlicePool is a generic wrapper for sync.Pool to handle slices of any type T
+type SlicePool[T any] struct {
+	pool sync.Pool
+}
+
+func NewSlicePool[T any](capacity int) *SlicePool[T] {
+	return &SlicePool[T]{
+		pool: sync.Pool{
+			New: func() any {
+				// Allocate a slice with the specified capacity
+				s := make([]T, 0, capacity)
+				return &s // We pool the pointer to the slice header
+			},
+		},
+	}
+}
+
+func (p *SlicePool[T]) Get() *[]T {
+	return p.pool.Get().(*[]T)
+}
+
+func (p *SlicePool[T]) Put(s *[]T) {
+	// Reset length to 0 but keep the capacity
+	*s = (*s)[:0]
+	p.pool.Put(s)
+}
