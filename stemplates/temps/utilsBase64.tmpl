@@ -1,0 +1,29 @@
+package utils
+
+import (
+	"encoding/base64"
+	"fmt"
+	"os"
+)
+
+// EncodeFile reads a file and returns its Base64 encoded string.
+func EncodeFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(data), nil
+}
+
+// DecodeToFile decodes a Base64 string and writes it to a file.
+func DecodeToFile(b64 string, path string) error {
+	data, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return fmt.Errorf("failed to decode base64: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+	return nil
+}

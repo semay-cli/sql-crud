@@ -1,0 +1,56 @@
+package utils
+
+import (
+	"encoding/csv"
+	"fmt"
+	"io"
+)
+
+// ReadCSVFromBuffer reads CSV data from a Reader and returns a slice of maps.
+// Each map represents a row, keyed by the header column names.
+// requiredHeaders: optional list of headers that MUST be present.
+func ReadCSVFromBuffer(buf io.Reader, requiredHeaders []string) ([]map[string]string, error) {
+	reader := csv.NewReader(buf)
+
+	// Read header
+	headers, err := reader.Read()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CSV header: %w", err)
+	}
+
+	// Validate headers
+	if len(requiredHeaders) > 0 {
+		headerMap := make(map[string]bool)
+		for _, h := range headers {
+			headerMap[h] = true
+		}
+		for _, rh := range requiredHeaders {
+			if !headerMap[rh] {
+				return nil, fmt.Errorf("missing required header: %s", rh)
+			}
+		}
+	}
+
+	var result []map[string]string
+
+	// Read rows
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CSV row: %w", err)
+		}
+
+		rowMap := make(map[string]string)
+		for i, value := range record {
+			if i < len(headers) {
+				rowMap[headers[i]] = value
+			}
+		}
+		result = append(result, rowMap)
+	}
+
+	return result, nil
+}

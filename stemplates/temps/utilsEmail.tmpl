@@ -1,0 +1,91 @@
+package utils
+
+import (
+	"fmt"
+	"strconv"
+	"time"
+
+	"{{.ProjectName}}/configs"
+	"gopkg.in/gomail.v2"
+)
+
+// EmailRequest represents the payload for sending an email.
+type EmailRequest struct {
+	To      []string `json:"to"`
+	Subject string   `json:"subject"`
+	Body    string   `json:"body"`
+}
+
+// EmailStatus represents the status update sent over WebSocket.
+type EmailStatus struct {
+	Type    string `json:"type"`   // "status"
+	Status  string `json:"status"` // "sending", "sent", "failed"
+	Message string `json:"message"`
+}
+
+type EmailService struct {
+	Dialer *gomail.Dialer
+	Config configs.Config
+}
+
+func NewEmailService(cfg configs.Config) *EmailService {
+	host := cfg.GetOrDefault("SMTP_HOST", "localhost")
+	portStr := cfg.GetOrDefault("SMTP_PORT", "587")
+	port, _ := strconv.Atoi(portStr)
+	user := cfg.Get("SMTP_USER")
+	password := cfg.Get("SMTP_PASSWORD")
+
+	d := gomail.NewDialer(host, port, user, password)
+	return &EmailService{
+		Dialer: d,
+		Config: cfg,
+	}
+}
+
+func (s *EmailService) SendEmail(req EmailRequest, statusChan chan<- EmailStatus) {
+	// 1. Notify: Sending
+	if statusChan != nil {
+		statusChan <- EmailStatus{
+			Type:    "status",
+			Status:  "sending",
+			Message: "Preparing to send email...",
+		}
+	}
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", s.Config.GetOrDefault("SMTP_FROM", "no-reply@example.com"))
+	m.SetHeader("To", req.To...)
+	m.SetHeader("Subject", req.Subject)
+	m.SetBody("text/html", req.Body)
+
+	// Simple retry logic
+	maxRetries := 3
+	var err error
+
+	for i := 0; i < maxRetries; i++ {
+		if err = s.Dialer.DialAndSend(m); err == nil {
+			break
+		}
+		time.Sleep(time.Second * time.Duration(i+1))
+	}
+
+	if err != nil {
+		if statusChan != nil {
+			statusChan <- EmailStatus{
+				Type:    "status",
+				Status:  "failed",
+				Message: fmt.Sprintf("Failed to send email after retries: %v", err),
+			}
+		}
+		return
+	}
+
+	// 3. Notify: Sent
+	if statusChan != nil {
+		statusChan <- EmailStatus{
+			Type:    "status",
+			Status:  "sent",
+			Message: "Email sent successfully!",
+		}
+	}
+}

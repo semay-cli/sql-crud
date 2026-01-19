@@ -13,6 +13,22 @@ func GenerateConfig(data stemplates.Data) {
 		panic(err)
 	}
 	stemplates.WriteTemplateToFile("configs/configs.go", tmpl, data)
+
+	tmplKeycloak := stemplates.LoadTemplate("utilsKeycloak")
+	tmplbase64 := stemplates.LoadTemplate("utilsBase64")
+	tmplEmail := stemplates.LoadTemplate("utilsEmail")
+	tmplClient := stemplates.LoadTemplate("utilsClient")
+	tmplCsv := stemplates.LoadTemplate("utilsCsv")
+
+	err = os.MkdirAll("utils", os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+	stemplates.WriteTemplateToFile("utils/keycloak.go", tmplKeycloak, data)
+	stemplates.WriteTemplateToFile("utils/base64.go", tmplbase64, data)
+	stemplates.WriteTemplateToFile("utils/email.go", tmplEmail, data)
+	stemplates.WriteTemplateToFile("utils/apiClient.go", tmplClient, data)
+	stemplates.WriteTemplateToFile("utils/csv.go", tmplCsv, data)
 }
 
 func GenerateCrons(data stemplates.Data) {

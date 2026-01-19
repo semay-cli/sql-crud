@@ -25,7 +25,7 @@ var (
 			env, _ := cmd.Flags().GetString("env")
 
 			// if enviroment variable not provided setting default to dev
-			container := buildContainer()
+			container := buildMigrationContainer()
 
 			err := container.Invoke(func(cfg *configs.EnvConfig, logger *logs.Logger) {
 				cfg.SetEnv(env)
