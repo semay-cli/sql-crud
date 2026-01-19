@@ -216,7 +216,7 @@ func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}By{{ $field | ge
 {{ end }}{{- end }}
 
 // Get returns {{.LowerName}}s with pagination and search
-func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]any, out *[]models.{{.Name}}Get) (uint, error) {
+func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]string, out *[]models.{{.Name}}Get) (uint, error) {
     isPG := s.DB.Dialector.Name() == "postgres" 
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
@@ -242,7 +242,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Cont
            qb = qb.Where("{{$.Name | toInitials}}.{{ $field | getBase }}" + likeExpr,{{ $field | getBase }})  // You can set it to "" or leave it as nil, depending on your query's COALESCE logic
         }    
     {{- else }}
-        if ok && searchTerm["{{ $field | getBase }}"] != nil && {{ $field | getBase }} != "" {
+        if ok && searchTerm["{{ $field | getBase }}"] != "" {
            qb = qb.Where("{{$.Name | toInitials}}.{{ $field | getBase }} = ?",{{ $field | getBase }})
         }
     {{- end}}

@@ -22,3 +22,14 @@ func (p prettyWriteSyncer) Write(b []byte) (int, error) {
 func (p prettyWriteSyncer) Sync() error {
 	return p.ws.Sync()
 }
+
+
+// nopSyncWriter wraps a zapcore.WriteSyncer and ignores Sync calls.
+// This prevents the background flushLoop from blocking on disk I/O.
+type nopSyncWriter struct {
+	zapcore.WriteSyncer
+}
+
+func (w *nopSyncWriter) Sync() error {
+	return nil // Ignore the sync request
+}

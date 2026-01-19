@@ -15,7 +15,8 @@ import (
 //go tool pprof -inuse_space after.pb.gz
 //go tool pprof -alloc_space after.pb.gz
 //hey -z 2m -c 5000 -m GET -q 10000 -H "x-app-key:Bearer something"  'http://localhost:7500/api/v1/blue_admin/user?page=1&size=20'
-
+//curl http://localhost:6060/debug/pprof/profile?seconds=30 > cpu.pb.gz
+//go tool pprof -http=:8080 cpu.pb.gz
 func main() {
 
 	go func() {

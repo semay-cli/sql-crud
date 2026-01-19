@@ -19,8 +19,9 @@ import (
 	// "{{.ProjectName}}/observe"
 )
 
-
-
+var (
+	{{.LowerName}}SearchFields = []string{ {{.SearchFields | formatSliceToString}} }
+)
 
 // Get{{.Name}}s function to get a {{.Name}}s with pagination and searchFields
 // @Summary Get {{.Name}}s
@@ -60,7 +61,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx echo.Co
 
 	
 	// Getting search fields
-	searchTerm := common.GetSearchMap()
+	searchTerm := common.GetSearchMap[string]()
 	defer common.PutSearchMap(searchTerm)
 	
 	if err := contx.Bind(&searchTerm); err != nil {
@@ -70,8 +71,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx echo.Co
 		return contx.JSON(http.StatusInternalServerError, resp_err)
 	}
 
-	searchFields := []string{ {{.SearchFields | formatSliceToString}} }
-	common.FilterMapInPlace(searchTerm, searchFields)
+	common.FilterMapInPlace(searchTerm, {{.LowerName}}SearchFields)
 
 	// Prepare pagination model
 	pagination := models.Pagination{

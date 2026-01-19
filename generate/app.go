@@ -47,7 +47,9 @@ func GenerateAppEchoGlobal(data stemplates.Data) {
 func GenerateGlobalFiberAppMiddleware(data stemplates.Data) {
 	tmpl := stemplates.LoadTemplate("globalFiberMiddleware")
 	tmplZap := stemplates.LoadTemplate("globalFiberZapMiddleware")
+	tmplAdaptiveLimiter := stemplates.LoadTemplate("adaptiveLimiterFiber")
 
+	stemplates.WriteTemplateToFile("manager/adaptive.go", tmplAdaptiveLimiter, data)
 	stemplates.WriteTemplateToFile("manager/middleware.go", tmpl, data)
 	stemplates.WriteTemplateToFile("manager/zapmiddleware.go", tmplZap, data)
 

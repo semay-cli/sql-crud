@@ -17,7 +17,7 @@ var (
 
 	searchMapPool = sync.Pool{
 		New: func() any {
-			return make(map[string]any)
+			return make(map[string]string)
 		},
 	}
 )
@@ -51,19 +51,22 @@ func FilterMapByKeys(input map[string]any, allowedKeys []string) map[string]any 
 	return filtered
 }
 
-func FilterMapInPlace(input map[string]any, allowedKeys []string) {
-    allowed := make(map[string]bool, len(allowedKeys))
-    for _, k := range allowedKeys {
-        allowed[k] = true
-    }
-    
-    // Remove keys that are not in the allowed list
-    for k := range input {
-        if !allowed[k] {
-            delete(input, k)
-        }
-    }
+// FilterMapInPlace filters a map[string,T] in place, keeping only allowedKeys
+func FilterMapInPlace[T any](input map[string]T, allowedKeys []string) {
+	// Build a lookup set for allowed keys
+	allowed := make(map[string]struct{}, len(allowedKeys))
+	for _, k := range allowedKeys {
+		allowed[k] = struct{}{}
+	}
+
+	// Remove keys that are not in the allowed list
+	for k := range input {
+		if _, ok := allowed[k]; !ok {
+			delete(input, k)
+		}
+	}
 }
+
 
 // Generic function to filter the map based on a list of allowed keys.
 func FilterSearchTerms(input map[string]any, allowedKeys []string) []string {
@@ -108,16 +111,19 @@ func PutResponsePagination(r *ResponsePagination) {
 	responsePaginationPool.Put(r)
 }
 
-// GetSearchMap gets a map[string]any from the pool.
-func GetSearchMap() map[string]any {
-	return searchMapPool.Get().(map[string]any)
+
+// GetSearchMap gets a map[string,T] from the pool.
+func GetSearchMap() map[string]string {
+	if v := searchMapPool.Get(); v != nil {
+		return v.(map[string]string)
+	}
+	return make(map[string]string)
 }
 
-// PutSearchMap clears and returns a map[string]any to the pool.
-func PutSearchMap(m map[string]any) {
+// PutSearchMap clears and returns a map[string,T] to the pool.
+func PutSearchMap(m map[string]string) {
 	for k := range m {
 		delete(m, k)
 	}
 	searchMapPool.Put(m)
 }
-

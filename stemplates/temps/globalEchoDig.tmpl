@@ -43,6 +43,14 @@ var (
 		Short: "Run Development server",
 		Long:  "Run development server",
 		Run: func(cmd *cobra.Command, args []string) {
+			isWorker := false
+			for _, arg := range args {
+				if arg == "worker" {
+					isWorker = true
+					break
+				}
+			}
+
 			container := buildContainer()
 			err := container.Invoke(func(deps struct {
 				dig.In
@@ -60,15 +68,16 @@ var (
 				{{ . | replaceString }}.SetupRoutes(deps.App, deps.{{ . | toPascalCase }}Ctrl)
 				{{- end}}
 
-				// starting shceduled tasks
-				deps.Scheduler.Start()
-
-				// starting server
-				go startServer(deps.App, deps.Cfg,deps.Logger)
-
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				waitForShutdown(deps.App, ctx,deps.Logger)
+				if isWorker {
+					deps.Logger.Info(fmt.Sprintf("Worker PID %d starting Echo...", os.Getpid()))
+					port := deps.Cfg.Get("HTTP_PORT")
+					addr := "0.0.0.0:" + port
+					runWorker(deps.App, addr, deps.Logger)
+				} else {
+					// MASTER: Start the scheduler and spawn workers
+					deps.Scheduler.Start()
+					startMaster(deps.Logger)
+				}
 
 				defer deps.Logger.Sync()
 			})
@@ -149,40 +158,132 @@ func NewEchoApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrace
 	return app
 }
 
-// ---- Graceful Shutdown ----
-func waitForShutdown(app *echo.Echo, ctx context.Context, logger *logs.Logger) {
-	<-ctx.Done()
-	logger.Info("Gracefully shutting down...")
+func startMaster(logger *logs.Logger) {
+	numCPU := runtime.NumCPU()
+	logger.Info(fmt.Sprintf("Master PID %d managing %d workers", os.Getpid(), numCPU))
 
-	ctxTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	processes := make(map[int]*os.Process)
+	var mu sync.Mutex
 
-	if err := app.Shutdown(ctxTimeout); err != nil {
-		// app_errors := logs.Field{"error": err.Error()}
-		logger.Error("Error during server shutdown: ", err)
+	// Function to spawn a worker
+	spawn := func() {
+		cmd := os.Args[0]
+		// Explicitly pass "worker" as the command argument
+
+		args := []string{cmd, "run", "worker"}
+		proc, err := os.StartProcess(cmd, args, &os.ProcAttr{
+			Env:   os.Environ(),
+			Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+		})
+		// .
+		if err != nil {
+			logger.Error("Failed to start worker process: ", err)
+			return
+		}
+
+		mu.Lock()
+		processes[proc.Pid] = proc
+		mu.Unlock()
+
+		// Monitor this specific process
+		go func(p *os.Process) {
+			state, _ := p.Wait()
+
+			mu.Lock()
+			delete(processes, p.Pid)
+			mu.Unlock()
+
+			if state != nil && !state.Success() {
+				logger.Warn(fmt.Sprintf("Worker %d exited with error, respawning...", p.Pid))
+				time.Sleep(1 * time.Second) // Throttling
+				// Note: Re-spawn logic would go here if you want high availability
+			}
+		}(proc)
 	}
-	logger.Info("Shutdown complete.")
+
+	// Initial Start
+	for i := 0; i < numCPU; i++ {
+		spawn()
+	}
+
+	// Correct Signal Handling for Ctrl+C
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// This block is what allows Ctrl+C to work
+	receivedSig := <-sigChan
+	logger.Info(fmt.Sprintf("Master received signal: %v. Shutting down workers...", receivedSig))
+
+	mu.Lock()
+	for pid, proc := range processes {
+		logger.Info(fmt.Sprintf("Sending SIGTERM to worker %d", pid))
+		_ = proc.Signal(syscall.SIGTERM)
+	}
+	mu.Unlock()
+
+	// Give workers time to finish gracefully
+	time.Sleep(2 * time.Second)
+	logger.Info("Master process exiting.")
+	os.Exit(0)
 }
 
-// ---- Start Server ----
-func startServer(app *echo.Echo, cfg *configs.EnvConfig, logger *logs.Logger) {
-	if app_otel == "on" {
-		tp := observe.InitTracer(cfg)
-		defer func() {
-			if err := tp.Shutdown(context.Background()); err != nil {
-				// app_errors := logs.Field{"error": err.Error()}
-				logger.Error("error shutting down tracer provider: %v", err)
-			}
-		}()
+// Worker function for prefork
+func runWorker(app *echo.Echo, addr string, logger *logs.Logger) {
+	host, portStr, _ := net.SplitHostPort(addr)
+	port, _ := strconv.Atoi(portStr)
+
+	// Create raw socket
+	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM|unix.SOCK_NONBLOCK|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		logger.Fatal("Socket error:", err)
 	}
 
-	port := cfg.Get("HTTP_PORT")
-	addr := "0.0.0.0:" + port
+	// Important: Close the raw FD once we've handed it off to net.Listener
+	defer unix.Close(fd)
 
+	_ = unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_REUSEADDR, 1)
+	if err := unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_REUSEPORT, 1); err != nil {
+		logger.Fatal("SO_REUSEPORT not supported:", err)
+	}
+
+	sa := &unix.SockaddrInet4{Port: port}
+	copy(sa.Addr[:], net.ParseIP(host).To4())
+	if err := unix.Bind(fd, sa); err != nil {
+		logger.Fatal("Bind error:", err)
+	}
+
+	if err := unix.Listen(fd, unix.SOMAXCONN); err != nil {
+		logger.Fatal("Listen error:", err)
+	}
+
+	// Hand off to Go's net package
+	file := os.NewFile(uintptr(fd), "listener")
+	ln, err := net.FileListener(file)
+	file.Close() // Safe to close after FileListener
+	if err != nil {
+		logger.Fatal("FileListener error:", err)
+	}
+
+	// Worker Graceful Shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-quit
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = app.Shutdown(ctx)
+	}()
+
+	// Start Serving
+	var serveErr error
 	if app_tls == "on" {
-		app.Logger.Fatal(app.StartTLS(addr, "./server.pem", "./server-key.pem"))
+		serveErr = app.Server.ServeTLS(ln, "./server.pem", "./server-key.pem")
 	} else {
-		app.Logger.Fatal(app.Start(addr))
+		serveErr = app.Server.Serve(ln)
+	}
+
+	if serveErr != nil && serveErr != http.ErrServerClosed {
+		logger.Fatal("Worker server failed:", serveErr)
 	}
 }
 

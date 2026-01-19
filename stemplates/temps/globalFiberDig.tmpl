@@ -21,8 +21,9 @@ import (
 	"{{.ProjectName}}/database"
 	"{{.ProjectName}}/observe"
 
-	
+	"github.com/Flussen/swagger-fiber-v3"
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/idempotency"
 	"github.com/gofiber/fiber/v3/middleware/limiter"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/static"
@@ -61,8 +62,10 @@ var (
 				{{ . | replaceString }}.SetupRoutes(deps.App, deps.{{ . | toPascalCase }}Ctrl)
 				{{- end}}
 
-				// starting shceduled tasks
-				deps.Scheduler.Start()
+				/// starting shceduled tasks
+				if !fiber.IsChild() {
+					deps.Scheduler.Start()
+				}
 
 				// starting server
 				go startServer(deps.App, deps.Cfg,deps.Logger)
@@ -90,21 +93,31 @@ func NewFiberApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrac
 	// Recovery middleware to catch panics
 	app.Use(recover.New())
 
+	// adaptive Rate limiter(tweak your app based on your db pooling and server setting to find you sweet spot)	
+	limiter := NewAdaptiveLimiter(5, 7, 2000*time.Microsecond,false)
+	app.Use(limiter.Handle)
+
+	// idempotency middleware
+	app.Use(idempotency.New())
+	
+
+
 	// Full chain middleware: CORS, headers, tracing, etc.
 	app.Use(FullChainMiddleware(appTracer))
 
 	//zap  logger
 	app.Use(FiberZapLogger(logger))
 
-	// Rate limiting
-	rateLimit, _ := strconv.ParseFloat(cfg.GetOrDefault("RATE_LIMIT_PER_SECOND", "50000"), 64)
-	app.Use(limiter.New(limiter.Config{
-		Max:        int(rateLimit),
-		Expiration: time.Second,
-	}))
+	//If fiber default Rate limiting(uncomment the below and comment the above)
+	//rateLimit, _ := strconv.ParseFloat(cfg.GetOrDefault("RATE_LIMIT_PER_SECOND", "50000"), 64)
+	//app.Use(limiter.New(limiter.Config{
+	//	Max:        int(rateLimit),
+	//	Expiration: time.Second,
+	//}))
 
 	// Prometheus metrics
 	observe.InitProm(prom, cfg)
+	app.Use(observe.HTTPMetricsMiddleware(cfg))
 
 
 
@@ -114,8 +127,10 @@ func NewFiberApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrac
 	app.Get("/{{ . | replaceString}}/docs/doc.json", static.New("./{{ . }}/docs/swagger.json"))
 	// Serve {{ . | replaceString }} docs
 	app.Get("/{{ . | replaceString }}/docs/*", swagger.New(swagger.Config{
-		InstanceName: "{{ . | replaceString }}",
 		URL:          "/{{ . | replaceString }}/docs/doc.json", // Match the served JSON file
+		// Optional: UI Customizations
+		DeepLinking:  false,
+		DocExpansion: "none",
 	}))
 	{{- end }}
 
@@ -136,6 +151,15 @@ func NewFiberApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrac
 	{{- end }}
 	
 
+	app.Get("/health", func(c fiber.Ctx) error {
+		c.Set("X-Service", "api")
+		return c.SendString("OK")
+	})
+
+
+	//// fiber native monitoring metrics endpoint
+	//app.Get("/lmetrics", monitor.New(monitor.Config{Title: "goBlue Metrics Page"})).Name("custom_metrics_route")
+
 	return app
 }
 
@@ -155,7 +179,9 @@ func startServer(app *fiber.App, cfg *configs.EnvConfig, logger *logs.Logger) {
 		logger.Fatal("TLS start not implemented")
 	} else {
 		logger.Info("Starting server on", "addr", addr)
-		if err := app.Listen(addr); err != nil {
+		if err := app.Listen(addr,fiber.ListenConfig{
+			EnablePrefork: false, // ✅ Enable prefork here
+			}); err != nil {
 			logger.Fatal("Server failed:", err)
 		}
 	}

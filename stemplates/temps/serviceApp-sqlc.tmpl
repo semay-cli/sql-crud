@@ -49,7 +49,7 @@ func (s *{{ .AppName | toPascalCase }}Service) GetOne{{.Name}}(ctx context.Conte
 }
 
 // Get returns {{.LowerName}}s with pagination and search
-func (s *{{ .AppName | toPascalCase }}Service) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]any, out *[]models.{{.Name}}Get) (uint, error) {
+func (s *{{ .AppName | toPascalCase }}Service) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]string, out *[]models.{{.Name}}Get) (uint, error) {
 
 	totalCount, err := s.Repo.Get{{.Name}}s(ctx, pagination, searchTerm,out)
     if err != nil {

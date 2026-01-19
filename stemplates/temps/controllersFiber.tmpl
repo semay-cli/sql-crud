@@ -17,8 +17,9 @@ import (
 	"{{.ProjectName}}/{{.AppName}}/models"
 	// "{{.ProjectName}}/observe"
 )
-
-
+var (
+	{{.LowerName}}SearchFields = []string{ {{.SearchFields | formatSliceToString}} }
+)
 
 
 // Get{{.Name}}s function to get a {{.Name}}s with pagination and searchFields
@@ -62,15 +63,15 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx fiber.C
 	searchTerm := common.GetSearchMap()
 	defer common.PutSearchMap(searchTerm)
 	
-	if err := contx.Bind().Query(searchTerm); err != nil {
-		resp_err.Message = err.Error()
-		resp_err.Success = false
-		resp_err.Data = nil
-		return common.SendJSON(contx,fiber.StatusInternalServerError, resp_err)
+	for _, field := range {{.LowerName}}SearchFields {
+		val := contx.Query(field) // Zero allocation if the field isn't there
+		if val != "" {
+			searchTerm[field] = val
+		}
+
 	}
 
-	searchFields := []string{ {{.SearchFields | formatSliceToString}} }
-	common.FilterMapInPlace(searchTerm, searchFields)
+	//common.FilterMapInPlace(searchTerm, {{.LowerName}}SearchFields)
 
 	// Prepare pagination model
 	pagination := models.Pagination{

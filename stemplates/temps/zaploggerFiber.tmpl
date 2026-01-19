@@ -82,22 +82,34 @@ func NewZapLogger() *Logger {
 	infoFile, _ := os.OpenFile("server.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	errorFile, _ := os.OpenFile("server-error.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
+	// Wrap the files in our nopSyncWriter before passing to the buffer
 	infoBuffered := &zapcore.BufferedWriteSyncer{
-		WS:            zapcore.AddSync(infoFile),
+		WS:            &nopSyncWriter{zapcore.AddSync(infoFile)}, // <--- Wrap here
 		Size:          256 * 1024,
 		FlushInterval: 5 * time.Second,
 	}
 
 	errorBuffered := &zapcore.BufferedWriteSyncer{
-		WS:            zapcore.AddSync(errorFile),
+		WS:            &nopSyncWriter{zapcore.AddSync(errorFile)}, // <--- Wrap here
 		Size:          64 * 1024,
 		FlushInterval: 1 * time.Second,
 	}
+	
+	infoCore := zapcore.NewCore(
+	encoder,
+	infoBuffered,
+	zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl < zap.ErrorLevel && lvl >= atomicLevel.Level()
+	}),
+)
 
-	infoCore := zapcore.NewCore(encoder, infoBuffered, atomicLevel)
-	errorCore := zapcore.NewCore(encoder, errorBuffered, zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl >= zap.ErrorLevel
-	}))
+	errorCore := zapcore.NewCore(
+		encoder,
+		errorBuffered,
+		zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return lvl >= zap.ErrorLevel
+		}),
+	)
 
 	core := zapcore.NewTee(infoCore, errorCore)
 
