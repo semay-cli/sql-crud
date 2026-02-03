@@ -1,0 +1,28 @@
+package controllers
+
+import (
+	"sync"
+
+	"github.com/go-playground/validator/v10"
+)
+
+var validatorPool = sync.Pool{
+	New: func() any {
+		v := validator.New()
+
+		// Register custom validations here if needed
+		// v.RegisterValidation("foo", fooValidator)
+
+		return v
+	},
+}
+
+func getValidator() *validator.Validate {
+	return validatorPool.Get().(*validator.Validate)
+}
+
+func putValidator(v *validator.Validate) {
+	// No Reset() method exists, so only pool it
+	// if you're not mutating it after creation
+	validatorPool.Put(v)
+}

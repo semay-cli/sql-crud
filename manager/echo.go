@@ -69,6 +69,7 @@ func runSwagInitForApps() {
 			"--output", outputDir,
 			"--dir", dirArg,
 		)
+		fmt.Printf("Running: swag init --generalInfo setup.go --output %s --dir %s\n", outputDir, dirArg)
 
 		// Run the command and handle errors
 		if err := cmd.Run(); err != nil {

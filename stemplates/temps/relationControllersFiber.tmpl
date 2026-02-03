@@ -6,7 +6,6 @@ import (
 		{{- if .MtM}}
 	{{- $break_math = true }}
 	{{- end}}
-	"strconv"
 	 "github.com/gofiber/fiber/v3"
 	"{{.ProjectName}}/common"
 	"{{.ProjectName}}/{{.AppName}}/models"
@@ -25,7 +24,7 @@ import (
 // @Produce json
 // @Param {{.LowerFieldName}}_id path string true "{{.FieldName}} ID"
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerFieldName}}_id{{ "}" }}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [post]
 func (ctrl *{{ .AppName | toPascalCase }}Controller)  Add{{.FieldName}}To{{.ParentName}}(contx fiber.Ctx) error {
 
@@ -66,9 +65,9 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller)  Add{{.FieldName}}To{{.Pare
 // @Produce json
 // @Param {{.LowerFieldName}}_id path string true "{{.FieldName}} ID"
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Success 200 {object} common.ResponseHTTP{data=models.{{.ParentName}}Post}
-// @Failure 400 {object} common.ResponseHTTP{}
-// @Failure 500 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponseHTTP[any]{data=models.{{.ParentName}}Post}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
+// @Failure 500 {object} common.ResponseHTTP[any]{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerFieldName}}_id{{ "}" }}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [delete]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.FieldName}}From{{.ParentName}}(contx fiber.Ctx) error {
 	
@@ -110,9 +109,9 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.FieldName}}From{{.
 // @Produce json
 // @Param page query int true "page"
 // @Param size query int true "page size"
-// @Success 200 {object} common.ResponsePagination{data=[]models.{{.FieldName}}Get}
+// @Success 200 {object} common.ResponsePagination[any]{data=[]models.{{.FieldName}}Get}
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.ParentName}}s(contx fiber.Ctx) error {
 
@@ -121,9 +120,20 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.Pare
 	resp_err := common.GetResponseHTTP()
 	defer common.PutResponseHTTP(resp_err)
 
+	// Access the low-level fasthttp args
+	args := contx.Request().URI().QueryArgs()
+
 	//  parsing Query Prameters
-	Page, _ := strconv.Atoi(contx.Query("page"))
-	Limit, _ := strconv.Atoi(contx.Query("size"))
+	Page := 1
+	if v, err := args.GetUint("page"); err == nil {
+		Page = int(v)
+	}
+
+	Limit := 10
+	if v, err := args.GetUint("size"); err == nil {
+		Limit = int(v)
+	}
+	
 	//  checking if query parameters  are correct
 	if Page == 0 || Limit == 0 {
 		resp_err.Message = "Not Allowed Params"
@@ -183,9 +193,9 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.Pare
 // @Security ApiKeyAuth
 // @Accept json
 // @Produce json
-// @Success 200 {object} common.ResponseHTTP{data=[]models.{{.FieldName}}Get}
+// @Success 200 {object} common.ResponseHTTP[any]{data=[]models.{{.FieldName}}Get}
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerFieldName}}noncomplement{{.LowerParentName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) GetAll{{.FieldName}}sOf{{.ParentName}}s(contx fiber.Ctx) error {
 
@@ -224,9 +234,9 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) GetAll{{.FieldName}}sOf{{.P
 // @Security ApiKeyAuth
 // @Accept json
 // @Produce json
-// @Success 200 {object} common.ResponseHTTP{data=[]models.{{.FieldName}}Get}
+// @Success 200 {object} common.ResponseHTTP[any]{data=[]models.{{.FieldName}}Get}
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerFieldName}}complement{{.LowerParentName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}Complement{{.ParentName}}s(contx fiber.Ctx) error {
 

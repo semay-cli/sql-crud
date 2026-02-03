@@ -7,13 +7,12 @@ import (
 )
 
 var (
-	// Pre-compute $1 through $100 to avoid strconv.Itoa allocations
+	// Pre-compute $1..$100
 	postgresPlaceholders []string
 
-	// Pool the byte slice to avoid strings.Builder allocation churn
 	bufferPool = sync.Pool{
 		New: func() any {
-			b := make([]byte, 0, 1024)
+			b := make([]byte, 0, 5120)
 			return &b
 		},
 	}
@@ -49,26 +48,38 @@ type Builder struct {
 	limit       int
 	offset      int
 	suffix      string
-	isPostgres  bool
+
+	isPostgres bool
+	isBatch    bool
+	colCount   int
 }
 
 var builderPool = sync.Pool{
 	New: func() any {
 		return &Builder{
-			columns:     make([]string, 0, 10),
-			values:      make([]any, 0, 10),
-			setClauses:  make([]string, 0, 10),
-			joinClauses: make([]string, 0, 4),
-			where:       make([]string, 0, 8),
-			args:        make([]any, 0, 16),
+			columns:     make([]string, 0, 32),
+			values:      make([]any, 0, 32),
+			setClauses:  make([]string, 0, 24),
+			joinClauses: make([]string, 0, 16),
+			where:       make([]string, 0, 16),
+			args:        make([]any, 0, 32),
 		}
 	},
 }
 
 func GetBuilder(isPostgres bool) *Builder {
 	b := builderPool.Get().(*Builder)
+
+	b.mode = modeSelect
+	b.table = ""
+	b.order = ""
+	b.suffix = ""
+	b.limit = 0
+	b.offset = 0
+	b.isBatch = false
+	b.colCount = 0
 	b.isPostgres = isPostgres
-	// Reset slices but keep allocated capacity
+
 	b.columns = b.columns[:0]
 	b.values = b.values[:0]
 	b.setClauses = b.setClauses[:0]
@@ -76,12 +87,11 @@ func GetBuilder(isPostgres bool) *Builder {
 	b.batchValues = b.batchValues[:0]
 	b.where = b.where[:0]
 	b.args = b.args[:0]
-	b.order, b.suffix, b.table = "", "", ""
-	b.limit, b.offset = 0, 0
+
 	return b
 }
 
-// --- Syntax Methods ---
+/* ---------- Builder API ---------- */
 
 func (b *Builder) Select(cols ...string) *Builder {
 	b.mode = modeSelect
@@ -100,6 +110,8 @@ func (b *Builder) BatchInsert(table string, columns []string, rows ...[]any) *Bu
 	b.table = table
 	b.columns = append(b.columns, columns...)
 	b.batchValues = append(b.batchValues, rows...)
+	b.isBatch = true
+	b.colCount = len(columns)
 	return b
 }
 
@@ -125,6 +137,12 @@ func (b *Builder) Join(join string) *Builder {
 	return b
 }
 
+func (b *Builder) JoinArgs(join string, args ...any) *Builder {
+	b.joinClauses = append(b.joinClauses, join)
+	b.args = append(b.args, args...)
+	return b
+}
+
 func (b *Builder) Columns(cols ...string) *Builder {
 	b.columns = append(b.columns, cols...)
 	return b
@@ -141,16 +159,55 @@ func (b *Builder) Set(col string, val any) *Builder {
 	return b
 }
 
-func (b *Builder) SetExpr(col string, expr string) *Builder {
+func (b *Builder) SetExpr(col, expr string) *Builder {
 	b.setClauses = append(b.setClauses, col+" = "+expr)
 	return b
 }
 
+/*
+Where FIX (non-breaking)
+
+Rules:
+- If query has NO '?', arg is ignored
+- If arg is nil AND no '?', do NOT bind
+- If arg is slice AND query has '(?)', auto-expand
+*/
 func (b *Builder) Where(query string, arg any) *Builder {
-	b.where = append(b.where, query)
-	if arg != nil {
-		b.args = append(b.args, arg)
+	// Fast path: no placeholder → expression only
+	if !strings.Contains(query, "?") {
+		b.where = append(b.where, query)
+		return b
 	}
+
+	// Auto-expand IN (?)
+	if slice, ok := arg.([]any); ok {
+		if len(slice) == 0 {
+			b.where = append(b.where, "1=0")
+			return b
+		}
+
+		buf := make([]byte, 0, len(query)+len(slice)*3)
+		for i := 0; i < len(query); i++ {
+			if query[i] == '?' {
+				for j := range slice {
+					if j > 0 {
+						buf = append(buf, ',', ' ')
+					}
+					buf = append(buf, byte('?'))
+				}
+			} else {
+				buf = append(buf, query[i])
+			}
+		}
+
+		b.where = append(b.where, string(buf))
+		b.args = append(b.args, slice...)
+		return b
+	}
+
+	// Normal single placeholder
+	b.where = append(b.where, query)
+	b.args = append(b.args, arg)
 	return b
 }
 
@@ -174,151 +231,143 @@ func (b *Builder) Suffix(s string) *Builder {
 	return b
 }
 
-// --- Finalizer ---
+/* ---------- Finalizer ---------- */
 
-// ToSql builds the query and returns the INTERNAL args slice for zero-allocation
 func (b *Builder) ToSql() (string, []any, error) {
-	var sql strings.Builder
-	// We removed the defer builderPool.Put(b) to keep args alive for the DB call
-
-	switch b.mode {
-	case modeSelect:
-		sql.WriteString("SELECT ")
-		if len(b.columns) == 0 {
-			sql.WriteString("*")
-		} else {
-			sql.WriteString(strings.Join(b.columns, ", "))
-		}
-		sql.WriteString(" FROM ")
-		sql.WriteString(b.table)
-		for _, join := range b.joinClauses {
-			sql.WriteString(" ")
-			sql.WriteString(join)
-		}
-
-	case modeInsert:
-		sql.WriteString("INSERT INTO ")
-		sql.WriteString(b.table)
-		sql.WriteString(" (")
-		sql.WriteString(strings.Join(b.columns, ", "))
-		sql.WriteString(") VALUES ")
-
-		if len(b.batchValues) > 0 {
-			for i, row := range b.batchValues {
-				if i > 0 {
-					sql.WriteString(", ")
-				}
-				sql.WriteString("(")
-				for j := range row {
-					if j > 0 {
-						sql.WriteString(", ")
-					}
-					sql.WriteString("?")
-				}
-				sql.WriteString(")")
-				b.args = append(b.args, row...)
-			}
-		} else {
-			sql.WriteString("(")
-			for i := range b.values {
-				if i > 0 {
-					sql.WriteString(", ")
-				}
-				sql.WriteString("?")
-			}
-			sql.WriteString(")")
-			b.args = append(b.args, b.values...)
-		}
-
-	case modeUpdate:
-		sql.WriteString("UPDATE ")
-		sql.WriteString(b.table)
-		sql.WriteString(" SET ")
-		sql.WriteString(strings.Join(b.setClauses, ", "))
-
-	case modeDelete:
-		sql.WriteString("DELETE FROM ")
-		sql.WriteString(b.table)
-	}
-
-	if len(b.where) > 0 {
-		sql.WriteString(" WHERE ")
-		for i, w := range b.where {
-			if i > 0 {
-				sql.WriteString(" AND ")
-			}
-			sql.WriteString(w)
-		}
-	}
-
-	if b.order != "" {
-		sql.WriteString(" ORDER BY ")
-		sql.WriteString(b.order)
-	}
-
-	if b.limit > 0 {
-		sql.WriteString(" LIMIT ")
-		sql.WriteString(strconv.Itoa(b.limit))
-	}
-
-	if b.offset > 0 {
-		sql.WriteString(" OFFSET ")
-		sql.WriteString(strconv.Itoa(b.offset))
-	}
-
-	if b.suffix != "" {
-		sql.WriteString(" ")
-		sql.WriteString(b.suffix)
-	}
-
-	rawSql := sql.String()
-	if b.isPostgres {
-		rawSql = replacePlaceholders(rawSql)
-	}
-
-	// We return b.args directly. No 'make' and no 'copy'.
-	// This saves 1 allocation per query.
-	return rawSql, b.args, nil
-}
-
-// Release puts the builder back into the pool.
-// Call this in your Repository using 'defer qb.Release()'.
-func (b *Builder) Release() {
-	builderPool.Put(b)
-}
-
-func replacePlaceholders(sql string) string {
 	bufPtr := bufferPool.Get().(*[]byte)
 	buf := (*bufPtr)[:0]
-
-	// Ensure the buffer goes back to the pool
 	defer func() {
 		*bufPtr = buf
 		bufferPool.Put(bufPtr)
 	}()
 
 	paramIdx := 1
-	for i := 0; i < len(sql); i++ {
-		if sql[i] == '?' {
-			if paramIdx <= 100 {
-				// Zero-allocation: use pre-computed string from slice
-				buf = append(buf, postgresPlaceholders[paramIdx]...)
+
+	write := func(s string) {
+		for i := 0; i < len(s); i++ {
+			if s[i] == '?' && b.isPostgres {
+				if paramIdx <= 100 {
+					buf = append(buf, postgresPlaceholders[paramIdx]...)
+				} else {
+					buf = append(buf, '$')
+					buf = append(buf, strconv.Itoa(paramIdx)...)
+				}
+				paramIdx++
 			} else {
-				// Fallback for massive queries
-				buf = append(buf, '$')
-				buf = append(buf, strconv.Itoa(paramIdx)...)
+				buf = append(buf, s[i])
 			}
-			paramIdx++
-		} else {
-			buf = append(buf, sql[i])
 		}
 	}
-	// Note: string(buf) is the only allocation here (unavoidable in Go)
-	return string(buf)
+
+	switch b.mode {
+	case modeSelect:
+		write("SELECT ")
+		if len(b.columns) == 0 {
+			write("*")
+		} else {
+			for i, c := range b.columns {
+				if i > 0 {
+					write(", ")
+				}
+				write(c)
+			}
+		}
+		write(" FROM ")
+		write(b.table)
+		for _, j := range b.joinClauses {
+			write(" ")
+			write(j)
+		}
+
+	case modeInsert:
+		write("INSERT INTO ")
+		write(b.table)
+		write(" (")
+		for i, c := range b.columns {
+			if i > 0 {
+				write(", ")
+			}
+			write(c)
+		}
+		write(") VALUES ")
+
+		if b.isBatch {
+			for i, row := range b.batchValues {
+				if i > 0 {
+					write(", ")
+				}
+				write("(")
+				for j := 0; j < b.colCount; j++ {
+					if j > 0 {
+						write(", ")
+					}
+					write("?")
+				}
+				write(")")
+				b.args = append(b.args, row...)
+			}
+		} else {
+			write("(")
+			for i := range b.values {
+				if i > 0 {
+					write(", ")
+				}
+				write("?")
+			}
+			write(")")
+			b.args = append(b.args, b.values...)
+		}
+
+	case modeUpdate:
+		write("UPDATE ")
+		write(b.table)
+		write(" SET ")
+		for i, c := range b.setClauses {
+			if i > 0 {
+				write(", ")
+			}
+			write(c)
+		}
+
+	case modeDelete:
+		write("DELETE FROM ")
+		write(b.table)
+	}
+
+	if len(b.where) > 0 {
+		write(" WHERE ")
+		for i, w := range b.where {
+			if i > 0 {
+				write(" AND ")
+			}
+			write(w)
+		}
+	}
+
+	if b.order != "" {
+		write(" ORDER BY ")
+		write(b.order)
+	}
+
+	if b.limit > 0 {
+		write(" LIMIT ")
+		buf = append(buf, strconv.Itoa(b.limit)...)
+	}
+
+	if b.offset > 0 {
+		write(" OFFSET ")
+		buf = append(buf, strconv.Itoa(b.offset)...)
+	}
+
+	if b.suffix != "" {
+		write(" ")
+		write(b.suffix)
+	}
+
+	sql := string(buf)
+	return sql, b.args, nil
 }
 
-func (b *Builder) JoinArgs(join string, args ...any) *Builder {
-	b.joinClauses = append(b.joinClauses, join)
-	b.args = append(b.args, args...)
-	return b
+func (b *Builder) Release() {
+	builderPool.Put(b)
 }

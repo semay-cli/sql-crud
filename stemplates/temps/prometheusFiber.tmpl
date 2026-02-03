@@ -14,6 +14,7 @@ import (
 	"github.com/shirou/gopsutil/mem"
 )
 
+
 //
 // ================= CONFIG =================
 //
@@ -56,9 +57,25 @@ var (
 // ================= INIT =================
 //
 
-func InitProm(reg *prometheus.Registry, cfg *configs.EnvConfig) {
+func InitPromDetail(reg *prometheus.Registry, cfg *configs.EnvConfig) {
 	reg.MustRegister(cpuUsage, memUsage, httpDuration)
 	go collectSystemMetrics(cfg)
+}
+
+// var httpDuration *prometheus.HistogramVec
+
+func InitProm(reg *prometheus.Registry, cfg *configs.EnvConfig) {
+	// serviceName := cfg.Get("APP_NAME")
+
+	httpDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Buckets: []float64{.001, .005, .01, .025, .05, .1}, // Pruned buckets = faster processing
+		},
+		[]string{"method", "route", "status", "service"},
+	)
+
+	reg.MustRegister(httpDuration)
 }
 
 //
@@ -124,6 +141,32 @@ func HTTPMetricsMiddleware(cfg *configs.EnvConfig) fiber.Handler {
 			c.Method(),
 			route,
 			status(c.Response().StatusCode()),
+			service,
+		).Observe(time.Since(start).Seconds())
+
+		return err
+	}
+}
+
+func HTTPMetricsMiddlewareOp(cfg *configs.EnvConfig) fiber.Handler {
+	service := cfg.Get("APP_NAME")
+	return func(c fiber.Ctx) error {
+		start := time.Now()
+		err := c.Next()
+
+		// Sample 1 out of 100 requests to reach 250k RPS
+		// At 250k RPS, 1% sampling still gives 2,500 data points per second!
+		if rand.Uint32()%100 != 0 {
+			return err
+		}
+
+		// Use pre-allocated status codes
+		codeStr := status(c.Response().StatusCode())
+
+		httpDuration.WithLabelValues(
+			c.Method(),
+			c.Route().Path,
+			codeStr,
 			service,
 		).Observe(time.Since(start).Seconds())
 

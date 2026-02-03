@@ -1,63 +1,70 @@
 package manager
 
 import (
-	"sync"
+	"math"
 	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 )
 
+// Static rejection message to avoid map allocations and JSON encoding overhead
+var (
+	errLimitReachedBody = []byte(`{"error":"server capacity reached","retry_after":"1s"}`)
+)
+
 type AdaptiveLimiter struct {
-	limit        int64
-	minLimit     int64
-	maxLimit     int64
-	inFlight     int64
-	moving       bool
-	targetP99    float64 // Use float64 for nanoseconds calculation
-	requestCount int64
-	smoothedLat  float64 // EWMA state
-	alpha        float64 // Smoothing factor (0.1 to 0.3 is typical)
-	mu           sync.RWMutex
+	// Padded fields prevent "False Sharing" on high-core CPUs (like your 24-process setup)
+	inFlight     atomic.Int64
+	_            [56]byte // Padding to fill a 64-byte cache line
+	limit        atomic.Int64
+	_            [56]byte
+	requestCount atomic.Int64
+	_            [56]byte
+
+	minLimit    int64
+	maxLimit    int64
+	targetP99   float64
+	smoothedLat uint64 // Stored as uint64 bits for atomic float updates
+	alpha       float64
+	moving      bool
 }
 
 func NewAdaptiveLimiter(min, max int64, targetP99 time.Duration, moving bool) *AdaptiveLimiter {
-	return &AdaptiveLimiter{
-		limit:       min + (max-min)/2,
-		minLimit:    min,
-		maxLimit:    max,
-		targetP99:   float64(targetP99.Nanoseconds()),
-		alpha:       0.2, // 20% weight to new data, 80% to history
-		smoothedLat: float64(targetP99.Nanoseconds()),
-		moving:      moving,
+	l := &AdaptiveLimiter{
+		minLimit:  min,
+		maxLimit:  max,
+		targetP99: float64(targetP99.Nanoseconds()),
+		alpha:     0.2,
+		moving:    moving,
 	}
+	l.limit.Store(min + (max-min)/2)
+	atomic.StoreUint64(&l.smoothedLat, math.Float64bits(float64(targetP99.Nanoseconds())))
+	return l
 }
 
 func (l *AdaptiveLimiter) Handle(c fiber.Ctx) error {
-	// 1. Check Capacity (Atomic Increment)
-	currentInFlight := atomic.AddInt64(&l.inFlight, 1)
-	defer atomic.AddInt64(&l.inFlight, -1)
+	// 1. Atomic Increment of In-Flight requests
+	currentInFlight := l.inFlight.Add(1)
+	defer l.inFlight.Add(-1)
 
-	limit := atomic.LoadInt64(&l.limit)
+	currentLimit := l.limit.Load()
 
-	// If we are over capacity, shed load immediately
-	if currentInFlight > limit {
-		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-			"error":       "server capacity reached",
-			"retry_after": "1s",
-		})
+	// 2. Load Shedding (Zero-Allocation Rejection)
+	if currentInFlight > currentLimit {
+		c.Status(fiber.StatusTooManyRequests)
+		c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSONCharsetUTF8)
+		return c.Send(errLimitReachedBody)
 	}
 
-	// 2. Measure Execution
 	start := time.Now()
 	err := c.Next()
 	duration := time.Since(start)
 
-	// 3. Adaptive Adjustment (Every 500 requests to minimize overhead)
-	if atomic.AddInt64(&l.requestCount, 1)%500 == 0 {
+	// 3. Adaptive Adjustment (Sample every 1000 requests to keep hot path fast)
+	if l.requestCount.Add(1)%1000 == 0 {
 		if l.moving {
-			l.adjustmoving(duration)
-
+			l.adjustMoving(duration)
 		} else {
 			l.adjust(duration)
 		}
@@ -66,49 +73,51 @@ func (l *AdaptiveLimiter) Handle(c fiber.Ctx) error {
 	return err
 }
 
-// simple
+// adjust uses a simple additive increase/multiplicative decrease
 func (l *AdaptiveLimiter) adjust(lastLatency time.Duration) {
-	currLimit := atomic.LoadInt64(&l.limit)
+	currLimit := l.limit.Load()
+	lat := float64(lastLatency.Nanoseconds())
 
-	// Additive Increase: If latency is good, try to handle more
-	if float64(lastLatency) <= l.targetP99 && currLimit < l.maxLimit {
-		atomic.AddInt64(&l.limit, 1)
-	}
-	// Multiplicative/Aggressive Decrease: If latency is bad, shrink the pool
-	if float64(lastLatency) > (l.targetP99*12/10) && currLimit > l.minLimit {
-		// Reduce by 10% or at least 1 for quicker recovery from congestion
-		decrease := currLimit / 10
+	if lat <= l.targetP99 && currLimit < l.maxLimit {
+		l.limit.Add(1)
+	} else if lat > (l.targetP99*2) && currLimit > l.minLimit {
+		// Drop by 20% on latency spikes
+		decrease := currLimit / 5
 		if decrease < 1 {
 			decrease = 1
 		}
-		atomic.AddInt64(&l.limit, -decrease)
+		l.limit.Add(-decrease)
 	}
 }
 
-// moving average
-func (l *AdaptiveLimiter) adjustmoving(lastLatency time.Duration) {
+// adjustMoving uses a lock-free Exponential Weighted Moving Average (EWMA)
+func (l *AdaptiveLimiter) adjustMoving(lastLatency time.Duration) {
 	newLat := float64(lastLatency.Nanoseconds())
+	var currentMovingAvg float64
 
-	l.mu.Lock()
-	// alpha 0.2 provides a good balance between stability and reaction speed
-	l.smoothedLat = (0.2 * newLat) + (0.8 * l.smoothedLat)
-	currentMovingAvg := l.smoothedLat
-	l.mu.Unlock()
+	// Lock-free update of the float64 using CAS (Compare-And-Swap)
+	for {
+		oldBits := atomic.LoadUint64(&l.smoothedLat)
+		oldLat := math.Float64frombits(oldBits)
 
-	currLimit := atomic.LoadInt64(&l.limit)
+		newSmoothed := (l.alpha * newLat) + ((1 - l.alpha) * oldLat)
+		newBits := math.Float64bits(newSmoothed)
 
-	// 1. Growth Phase (Additive Increase)
+		if atomic.CompareAndSwapUint64(&l.smoothedLat, oldBits, newBits) {
+			currentMovingAvg = newSmoothed
+			break
+		}
+	}
+
+	currLimit := l.limit.Load()
+
 	if currentMovingAvg <= l.targetP99 && currLimit < l.maxLimit {
-		atomic.AddInt64(&l.limit, 1)
-
-	} else if currentMovingAvg > (l.targetP99*1.25) && currLimit > l.minLimit {
-		// 2. Panic Phase (Multiplicative Decrease)
-		// Using 1.25x target as the "danger zone"
-		decrease := currLimit / 5 // More aggressive (20%) drop for non-cached routes
+		l.limit.Add(1)
+	} else if currentMovingAvg > (l.targetP99*1.5) && currLimit > l.minLimit {
+		decrease := currLimit / 5
 		if decrease < 1 {
 			decrease = 1
 		}
-		atomic.AddInt64(&l.limit, -decrease)
-
+		l.limit.Add(-decrease)
 	}
 }

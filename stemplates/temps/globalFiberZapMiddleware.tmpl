@@ -34,6 +34,8 @@ func FiberZapLogger(l *logs.Logger) fiber.Handler {
 				zap.Int("status", status),
 				zap.Duration("latency", time.Since(start)),
 				zap.String("ip", c.IP()),
+				// Only convert to string here if absolutely necessary
+                zap.ByteString("response", c.Response().Body()),
 			}
 
 			if err != nil {

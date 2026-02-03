@@ -1,421 +1,406 @@
 package repository
 
 import (
-	"context"
-	"fmt"
-	"strconv"
-	{{- $break_3 := false }}
-	{{- range .Fields }}
-		{{- if eq .Name "UUID" }}
-			{{- $break_3 = true }}
-		{{- end }}
-	{{- end }}
+    "context"
+    "fmt"
+    "database/sql"
+    {{- $break_3 := false }}
+    {{- range .Fields }}
+        {{- if eq .Name "UUID" }}
+            {{- $break_3 = true }}
+        {{- end }}
+    {{- end }}
 
-	{{- if $break_3 }}
-	"github.com/google/uuid"
-	{{- end }}
-   	"{{ .ProjectName }}/{{ $.AppName }}/models"
-	"{{ .ProjectName }}/querybuilder"
-	 "database/sql"
-   
+    {{- if $break_3 }}
+    "github.com/google/uuid"
+    {{- end }}
+    "{{ .ProjectName }}/{{ $.AppName }}/models"
+    "{{ .ProjectName }}/querybuilder"
+    "{{ .ProjectName }}/common"
+    "github.com/jackc/pgx/v5"
 )
 
 
-
 // Create inserts a new {{.LowerName}}
-func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Context, posted_{{.LowerName}} *models.{{.Name}}Post, tx *sql.Tx,out *models.{{.Name}}) error {
-
-        {{- range .Fields}} {{- if .Post}}
-            {{- if eq .Name "Password" }}
-        hashedPassword,_ := models.HashPassword(posted_{{$.LowerName}}.Password)
-        // hashedPassword,_ := models.HashFunc(posted_{{$.LowerName}}.Password,s.Cfg))
-            {{- end }}
+func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Context, posted_{{.LowerName}} *models.{{.Name}}Post, tx any, out *models.{{.Name}}) error {
+    {{- range .Fields}} {{- if .Post}}
+        {{- if eq .Name "Password" }}
+    hashedPassword, _ := models.HashPassword(*posted_{{$.LowerName}}.Password)
         {{- end }}
-        {{- if eq .Name "UUID" }}
-        {{$.LowerName}}_uuid, _ := uuid.NewV7()
-            {{- end }}
-        {{- end }}
-
-        isPG := s.DB.Dialector.Name() == "postgres"
-        qb := querybuilder.GetBuilder(isPG)
-        defer qb.Release()
-        
-        qb.Insert("{{.LowerName}}s").Columns(
-        {{- $i := 0 -}}
-            {{- range .Fields -}}
-            {{- if and
-                    (or .Post (eq .Name "Password") (eq .Name "UUID"))
-                    (ne .Name "ID")
-                    (ne .Name "CreatedAt")
-            -}}
-                {{- if gt $i 0}}, {{end}}"{{.Name | toSnakeCase}}"
-                {{- $i = add $i 1 -}}
-                
-            {{- end -}}
-            {{- end -}}
-        ).Values(
-            {{- range .Fields}} {{- if .Post}}
-            {{- if eq .Name "Password" }}
-                hashedPassword,
-            {{- else if eq .Name "UUID" }}
-                {{$.LowerName}}_uuid.String(),
-            {{- else if eq .Type "bool" }}
-                *posted_{{.ModelName | toLowerCaseName }}.{{.Name}},
-            {{- else }}
-                posted_{{.ModelName | toLowerCaseName }}.{{.Name}},
-            {{- end	}}
-        {{- end}}
-            {{- if eq .Name "UUID" }}
-               {{$.LowerName}}_uuid.String(),
-            {{- end }}
-        {{- end}}
-            
-        )
-
-        
-    // set created date
-	qb.SetExpr("created_at", "CURRENT_TIMESTAMP").
-        Suffix("RETURNING {{.LowerName}}s.*")
-
-    // 3. Build SQL
-	query, args, err := qb.ToSql()
-	if err != nil {
-		return fmt.Errorf("failed to build SQL: %v", err)
-	}
-
-    // Execute the query using sqlc
-    row := tx.QueryRowContext(ctx,query,args...)
-
-	var item models.{{.Name}}
-	err = row.Scan(
-	  {{- range .Fields}}{{- if ne .DBType  "None"}} 
-        &item.{{.Name}},
-      {{- end }}{{- end }}
-       &item.UpdatedAt,
-       &item.CreatedAt,
-	)
-    if err != nil {
-        return err
-    }
-    if out != nil {
-        *out = item
-    }
-	return nil
-}
-
-
-// GetOne fetches a {{.LowerName}} by ID
-func (s *{{ .AppName | toPascalCase }}Repository) GetOne{{.Name}}(ctx context.Context, id string,out *models.{{.Name}}) (error) {
-    // checking Cache if it exists
-   	cacheKey := "{{.LowerName}}:" + id
-	if cached{{.Name}}, found := s.Cache.Get(cacheKey); found {
-		*out = *(cached{{.Name}}.(*models.{{.Name}}))
-        return nil
-	}
-
-
-	objID, err := strconv.Atoi(id)
-	if err != nil {
-		return fmt.Errorf("invalid ID: %v", err)
-	}
+    {{- end }}
+    {{- if eq .Name "UUID" }}
+    {{$.LowerName}}_uuid, _ := uuid.NewV7()
+    {{- end }}
+    {{- end }}
 
     isPG := s.DB.Dialector.Name() == "postgres"
-
-    // Build the query
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
     
-    qb.Select("{{.Name | toInitials}}.*").
-            From("{{.LowerName}}s {{.Name | toInitials}}").
-            Where("{{.Name | toInitials}}.id= ?",objID)
-  
-
+    qb.Insert("{{.LowerName}}s").Columns(
+        {{- $i := 0 -}}
+        {{- range .Fields -}}
+            {{- if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") -}}
+                {{- if gt $i 0}}, {{end}}"{{.Name | toSnakeCase}}"
+                {{- $i = add $i 1 -}}
+            {{- end -}}
+        {{- end -}}
+    ).Values(
+        {{- range .Fields}} {{- if .Post}}
+            {{- if eq .Name "Password" }} hashedPassword,
+            {{- else if eq .Name "UUID" }} {{$.LowerName}}_uuid.String(),
+            {{- else if eq .Type "bool" }} *posted_{{$.LowerName}}.{{.Name}},
+            {{- else }} posted_{{$.LowerName}}.{{.Name}},
+            {{- end }}
+        {{- end }}
+        {{- if eq .Name "UUID" }} {{$.LowerName}}_uuid.String(), {{- end }}
+        {{- end }}
+    )
+        
+    qb.SetExpr("created_at", "CURRENT_TIMESTAMP").Suffix("RETURNING *")
     query, args, err := qb.ToSql()
-    if err != nil {
-        return fmt.Errorf("failed to build SQL: %v", err)
+    if err != nil { return err }
+
+    row := s.execQueryRow(ctx, tx, query, args...)
+
+    var item models.{{.Name}}
+    err = row.Scan(
+      {{- range .Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
+       &item.UpdatedAt, &item.CreatedAt,
+    )
+    if err != nil { return err }
+    if out != nil { *out = item }
+    return nil
+}
+
+// GetOne fetches a {{.LowerName}} by ID
+func (s *{{ .AppName | toPascalCase }}Repository) GetOne{{.Name}}(ctx context.Context, id string, out *models.{{.Name}}) error {
+    cacheKey := "{{.LowerName}}:" + id
+    if cached, found := s.Cache.Get(cacheKey); found {
+        *out = *(cached.(*models.{{.Name}}))
+        return nil
     }
 
-    // 4. Execute the query
-    row := s.SQLC.QueryRowContext(ctx, query, args...)
-   
+    isPG := s.DB.Dialector.Name() == "postgres"
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
+    
+    qb.Select("*").From("{{.LowerName}}s").Where("id = ?", id)
+    query, args, _ := qb.ToSql()
 
-	var item models.{{.Name}}
-	err = row.Scan(
-	  {{- range .Fields}}{{- if ne .DBType  "None"}} 
-        &item.{{.Name}},
-      {{- end }}{{- end }}
-      &item.UpdatedAt,
-	  &item.CreatedAt,
-	)
-	
-    if err != nil {
-		return  err
-	}
+    var err error
+    if s.NativePool != nil {
+        err = s.NativePool.QueryRow(ctx, query, args...).Scan(
+            {{- range .Fields}}{{- if ne .DBType "None"}} &out.{{.Name}}, {{- end }}{{- end }}
+            &out.UpdatedAt, &out.CreatedAt,
+        )
+    } else {
+        err = s.SQLC.QueryRowContext(ctx, query, args...).Scan(
+            {{- range .Fields}}{{- if ne .DBType "None"}} &out.{{.Name}}, {{- end }}{{- end }}
+            &out.UpdatedAt, &out.CreatedAt,
+        )
+    }
 
-    if out != nil {
-		*out = item
-        cachedCopy := item
-		s.Cache.Set(cacheKey, &cachedCopy)
-	}
-
-
-	return nil
+    if err == nil { s.Cache.Set(cacheKey, out) }
+    return err
 }
 
 {{ if gt (len .GetOneFields) 0 }}
 {{ range $i, $field := .GetOneFields }}
 
-// GetOne fetches a {{$.LowerName}} by {{ $field | getBase | toPascalCase }}
-func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}By{{ $field | getBase | toPascalCase }}(ctx context.Context, {{ $field | toSnakeCase }} string, out *models.{{$.Name}}) (error) {
+// Get{{$.Name}}By{{ $field | getBase | toPascalCase }} fetches a {{$.LowerName}} by {{ $field | getBase }}
+func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}By{{ $field | getBase | toPascalCase }}(ctx context.Context, {{ $field | toSnakeCase }} string, out *models.{{$.Name}}) error {
     // checking Cache if it exists
-   	cacheKey := "{{$.LowerName}}:" + {{ $field | toSnakeCase}}
-	if cached{{$.Name}}, found := s.Cache.Get(cacheKey); found {
-		*out = *(cached{{$.Name}}.(*models.{{$.Name}}))
+    cacheKey := "{{$.LowerName}}:" + {{ $field | toSnakeCase }}
+    if cached, found := s.Cache.Get(cacheKey); found {
+        *out = *(cached.(*models.{{$.Name}}))
         return nil
-	}
+    }
 
     isPG := s.DB.Dialector.Name() == "postgres"
-    // Build the query
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
 
     qb.Select("{{$.Name | toInitials}}.*").
         From("{{$.LowerName}}s {{$.Name | toInitials}}").
-        Where("{{$.Name | toInitials}}.{{ $field | getBase }}= ?",{{ $field | toSnakeCase }})
+        Where("{{$.Name | toInitials}}.{{ $field | getBase }}= ?", {{ $field | toSnakeCase }})
 
     query, args, err := qb.ToSql()
     if err != nil {
         return fmt.Errorf("failed to build SQL: %v", err)
     }
 
-    // 4. Execute the query
-    row := s.SQLC.QueryRowContext(ctx, query, args...)
-   
-	var item models.{{$.Name}}
-	err = row.Scan(
-	  {{- range $.Fields}}{{- if .Get }} 
-        &item.{{.Name}},
-      {{- end }}{{- end }}
-      &item.UpdatedAt,
-		&item.CreatedAt,
-	)
-	
+    // NATIVE POOL BRANCH
+    if s.NativePool != nil {
+        err = s.NativePool.QueryRow(ctx, query, args...).Scan(
+            {{- range $.Fields}}{{- if .Get }} 
+            &out.{{.Name}},
+            {{- end }}{{- end }}
+            &out.UpdatedAt,
+            &out.CreatedAt,
+        )
+    } else {
+        // FALLBACK BRANCH
+        err = s.SQLC.QueryRowContext(ctx, query, args...).Scan(
+            {{- range $.Fields}}{{- if .Get }} 
+            &out.{{.Name}},
+            {{- end }}{{- end }}
+            &out.UpdatedAt,
+            &out.CreatedAt,
+        )
+    }
+    
     if err != nil {
-		return  err
-	}
+        return err
+    }
 
     if out != nil {
-		*out = item
-        cachedCopy := item
-		s.Cache.Set(cacheKey, &cachedCopy)
-	}
+        cachedCopy := *out
+        s.Cache.Set(cacheKey, &cachedCopy)
+    }
 
-
-	return nil
+    return nil
 }
 {{ end }}{{- end }}
 
-// Get returns {{.LowerName}}s with pagination and search
+// Get{{.Name}}s returns resources with high-perf native pool branch
 func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]string, out *[]models.{{.Name}}Get) (uint, error) {
     isPG := s.DB.Dialector.Name() == "postgres" 
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
     
-    qb.Select("{{.Name | toInitials}}.*", "count(*) OVER() as total_count").
-        From("{{.LowerName}}s {{.Name | toInitials}}")
-   
-
+    qb.Select("{{.Name | toInitials}}.id", 
+    {{- $i := 0 -}}
+    {{- range .Fields -}}
+        {{- if and (or .Get (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") -}}
+            {{- if gt $i 0}}, {{end}}"{{$.Name | toInitials}}.{{.Name | toSnakeCase}}"
+            {{- $i = add $i 1 -}}
+        {{- end -}}
+    {{- end -}}, "count(*) OVER() as total_count").From("{{.LowerName}}s {{.Name | toInitials}}")
     {{ if gt (len .SearchFields) 0 }}
-    // Dialect-aware LIKE operator
-	likeExpr := " ILIKE CONCAT('%', ?::text, '%')"
-	if !isPG {
-		likeExpr = " LIKE '%' || ? || '%'"
-	}
-
+    likeExpr := " ILIKE CONCAT('%', ?::text, '%')"
+    if !isPG { likeExpr = " LIKE '%' || ? || '%'" }
     {{- end}}
 
     {{- range $i, $field := $.SearchFields }}
-    // Handle searchTerm nil values
-    {{ $field | getBase }}, ok := searchTerm["{{ $field | getBase }}"]
-    {{- if $field | isValid }} 
-        if ok && searchTerm["{{ $field | getBase }}"] != "" {
-           qb = qb.Where("{{$.Name | toInitials}}.{{ $field | getBase }}" + likeExpr,{{ $field | getBase }})  // You can set it to "" or leave it as nil, depending on your query's COALESCE logic
-        }    
-    {{- else }}
-        if ok && searchTerm["{{ $field | getBase }}"] != "" {
-           qb = qb.Where("{{$.Name | toInitials}}.{{ $field | getBase }} = ?",{{ $field | getBase }})
-        }
-    {{- end}}
+    if val, ok := searchTerm["{{ $field | getBase }}"]; ok && val != "" {
+        {{- if $field | isValid }} 
+           qb = qb.Where("{{$.Name | toInitials}}.{{ $field | getBase }}" + likeExpr, val)
+        {{- else }}
+           qb = qb.Where("{{$.Name | toInitials}}.{{ $field | getBase }} = ?", val)
+        {{- end}}
+    }
     {{- end}}
 
-    // Apply pagination with LIMIT and OFFSET
-	qb = qb.OrderBy("id DESC").
-		Limit(pagination.Size).
-		Offset((pagination.Page - 1) * pagination.Size)
+    qb = qb.OrderBy("id DESC").Limit(pagination.Size).Offset((pagination.Page - 1) * pagination.Size)
+    query, args, err := qb.ToSql()
+    if err != nil { return 0, err }
 
-	// Build the query string and parameters
-	query, args, err := qb.ToSql()
-	if err != nil {
-		return  0, fmt.Errorf("failed to build SQL query: %v", err)
-	}
-
-    // Reset the slice length to 0 (but keep the pooled capacity)
-	finalitems := (*out)[:0]
-
-	// Execute the query using sqlc
-	rows, err := s.SQLC.QueryContext(ctx, query, args...)
-	if err != nil {
-		return 0, err
-	}
-    defer rows.Close()
-
-   
-    item := models.{{.Name}}GetPool.Get()
+    finalitems := (*out)[:0]
     var totalCount int64
+
+    item := models.{{.Name}}GetItemPool.Get()
+	defer models.{{.Name}}GetItemPool.Put(item)
+
+    // NATIVE POOL BRANCH: This is the logic that fixes the 11GB allocation
+    if s.NativePool != nil {
+        rows, err := s.NativePool.Query(ctx, query, args...)
+        if err != nil { return 0, err }
+        defer rows.Close()
+        for rows.Next() {
+            
+            err := rows.Scan(
+                {{- range .Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
+                &totalCount,
+            )
+            finalitems = append(finalitems, *item)
+			if err != nil {
+				item.Reset()
+				return 0, err
+			}
+			item.Reset()
+        }
+        *out = finalitems
+        return uint(totalCount), nil
+    }
+
+    // FALLBACK BRANCH (Standard SQL)
+    rows, err := s.SQLC.QueryContext(ctx, query, args...)
+    if err != nil { return 0, err }
+    defer rows.Close()
     for rows.Next() {
+
         err := rows.Scan(
-          {{- range .Fields}}{{- if ne .DBType  "None"}} 
-            &item.{{.Name}},
-          {{- end }}{{- end }}
-          &item.UpdatedAt,
-          &item.CreatedAt,
+            {{- range .Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
             &totalCount,
         )
-
         finalitems = append(finalitems, *item)
         if err != nil {
-            models.{{.Name}}GetPool.Put(item)
+            item.Reset()
             return 0, err
         }
         item.Reset()
     }
-    models.{{.Name}}GetPool.Put(item)
     *out = finalitems
-
-	return uint(totalCount), nil
+    return uint(totalCount), nil
 }
 
-
-
-// Update modifies a {{.Name}}s by ID
-func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Context, id string ,patch_{{.LowerName}} *models.{{.Name}}Patch,tx  *sql.Tx, out *models.{{.Name}}) (error) {
+// Update modifies a {{.Name}} by ID
+func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Context, id string, patch_{{.LowerName}} *models.{{.Name}}Patch, tx any, out *models.{{.Name}}) error {
     isPG := s.DB.Dialector.Name() == "postgres"
-
-	qb := querybuilder.GetBuilder(isPG)
+    qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
     
     qb.Update("{{ .LowerName}}s")
-    
     {{- range .Fields}} {{- if .Patch}}
-    {{- if eq .Name "Password" }}
     if patch_{{$.LowerName}}.{{.Name}} != nil {
-        // setting password string to hash
-        hashedPassword,_ := models.HashPassword(*patch_{{$.LowerName}}.Password)
-        qb = qb.Set("{{.Name | camelToSnake }}",hashedPassword)
+        {{- if eq .Name "Password" }}
+        hashed, _ := models.HashPassword(*patch_{{$.LowerName}}.Password)
+        qb = qb.Set("{{.Name | toSnakeCase }}", hashed)
+        {{- else }}
+        qb = qb.Set("{{.Name | toSnakeCase }}", *patch_{{$.LowerName}}.{{.Name}})
+        {{- end }}
     }
-    {{- else if eq .Name "ID" }} 
-    
-    {{- else if eq .Type "bool" }}
-     if patch_{{$.LowerName}}.{{.Name}} != nil {
-        qb = qb.Set("{{.Name | camelToSnake }}", *patch_{{$.LowerName}}.{{.Name}})
-        }
-    {{- else }}
-    if patch_{{$.LowerName}}.{{.Name}} != nil {
-        qb = qb.Set("{{.Name | camelToSnake }}", *patch_{{$.LowerName}}.{{.Name}})
-    }
-    {{- end	}}
-    {{- end}}
-    {{- end}}
+    {{- end}}{{- end}}
 
+    qb.SetExpr("updated_at", "CURRENT_TIMESTAMP").Where("id = ?", id).Suffix("RETURNING *")
+    query, args, _ := qb.ToSql()
 
-
-	qb.SetExpr("updated_at", "CURRENT_TIMESTAMP").
-		Where("id = ?", id).
-		Suffix("RETURNING *")
-
-    
-    // Build the query string and parameters
-	query, args, err := qb.ToSql()
-	if err != nil {
-		return fmt.Errorf("failed to build SQL query: %v", err)
-	}
-
-    // Execute the query using sqlc
-	row := tx.QueryRowContext(ctx, query, args...)
-
-	var item models.{{.Name}}
-	err = row.Scan(
-	  {{- range .Fields}}{{- if ne .DBType  "None"}}  
-        &item.{{.Name}},
-      {{- end }}{{- end }}
-       &item.UpdatedAt,
-       &item.CreatedAt,
-	)
+    row := s.execQueryRow(ctx, tx, query, args...)
+    err := row.Scan(
+        {{- range .Fields}}{{- if ne .DBType "None"}} &out.{{.Name}}, {{- end }}{{- end }}
+        &out.UpdatedAt, &out.CreatedAt,
+    )
   
-    if err != nil {
-        return  err
-    }
-
-    if out != nil {
-        *out = item
-    }   
-
-    // Removing Cache if update success
-    cacheKey := "{{.LowerName}}:" + strconv.FormatUint(uint64(item.ID),10)
-    s.Cache.Delete(cacheKey)
-    {{- if and (eq .AppName .AuthAppName) (eq .Name "User") }}
-    email := item.Email
-    s.Cache.Delete("user:login:" + email)
-    {{- end }}
-
-	return nil
+    if err == nil { s.Cache.Delete("{{.LowerName}}:" + id) }
+    return err
 }
-
 
 // Delete removes a {{.LowerName}} by ID
-func (s *{{ .AppName | toPascalCase }}Repository) Delete{{.Name}}(ctx context.Context, id string, tx *sql.Tx) error {
-
-
-    // Build the delete query
+func (s *{{ .AppName | toPascalCase }}Repository) Delete{{.Name}}(ctx context.Context, id string, tx any) error {
     isPG := s.DB.Dialector.Name() == "postgres"
-
-	qb := querybuilder.GetBuilder(isPG)
+    qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
         
-    qb.Delete("{{.LowerName}}s").Where("id", id){{- if and (eq .AppName .AuthAppName) (eq .Name "User") }}.
-         Suffix("RETURNING email") {{- end }}
+    qb.Delete("{{.LowerName}}s").Where("id", id)
+    query, args, _ := qb.ToSql()
 
-   
-	// 3. Generate SQL string and arguments
-	query, args, err := qb.ToSql()
-	if err != nil {
-		return fmt.Errorf("failed to build delete SQL: %v", err)
-	}
-
-	// 4. Execute using the provided transaction (tx)
-   
-
-    {{- if and (eq .AppName .AuthAppName) (eq .Name "User") }}
-    var email string
-	err = tx.QueryRowContext(ctx, query, args...).
-        Scan(&email)
-	if err != nil {
-		return err
-	}
-    {{- else }}
-    _,err = tx.ExecContext(ctx, query, args...)
-    if err != nil {
-        return err
+    var err error
+    switch t := tx.(type) {
+    case pgx.Tx:
+        _, err = t.Exec(ctx, query, args...)
+    case *sql.Tx:
+        _, err = t.ExecContext(ctx, query, args...)
+    default:
+        if s.NativePool != nil {
+            _, err = s.NativePool.Exec(ctx, query, args...)
+        } else {
+            _, err = s.SQLC.ExecContext(ctx, query, args...)
         }
-    {{- end}}
+    }
 
-    // Removing Cache if delete success
-    cacheKey := "{{.LowerName}}:" + id
-    s.Cache.Delete(cacheKey)
-    {{- if and (eq .AppName .AuthAppName) (eq .Name "User") }}
-    s.Cache.Delete("user:login:" + email)
-    {{- end }}
-
-
-	return err
+    if err == nil { s.Cache.Delete("{{.LowerName}}:" + id) }
+    return err
 }
+
+// Pre-defined at package level to avoid heap allocation per call.
+var {{.LowerName}}InsertColumns = []string{
+    {{- $i := 0 -}}
+    {{- range .Fields -}}
+        {{- if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") -}}
+            {{- if gt $i 0}}, {{end}}"{{.Name | toSnakeCase}}"
+            {{- $i = add $i 1 -}}
+        {{- end -}}
+    {{- end -}}
+}
+
+func (s *{{ .AppName | toPascalCase }}Repository) BatchCreate{{.Name}}s(ctx context.Context, posted_{{.LowerName}}s []models.{{.Name}}Post, tx any) error {
+    count := len(posted_{{.LowerName}}s)
+    if count == 0 {
+        return nil
+    }
+
+    if count > 1000 {
+        return fmt.Errorf("batch size exceeds maximum limit of 1000")
+    }
+
+    // --- PATH A: NATIVE POSTGRES (CopyFrom Protocol) ---
+    // This is the fastest way to insert multiple rows in Postgres
+    if s.NativePool != nil && tx == nil {
+        _, err := s.NativePool.CopyFrom(
+            ctx,
+            pgx.Identifier{"{{.LowerName}}s"},
+            {{.LowerName}}InsertColumns,
+            pgx.CopyFromSlice(count, func(i int) ([]any, error) {
+                p := &posted_{{.LowerName}}s[i]
+                {{ if $break_3 }}u, _ := uuid.NewV7(); uStr := u.String();{{- end }}
+                {{- range .Fields }}{{ if eq .Name "Password" }}hashedPassword, _ := models.HashPassword(*p.Password);{{ end }}{{ end }}
+                
+                return []any{
+                    {{- range .Fields }}
+                        {{- if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") }}
+                            {{ if eq .Name "Password" }} hashedPassword,
+                            {{ else if eq .Name "UUID" }} uStr,
+                            {{ else if eq .Type "bool" }} (p.{{.Name}} != nil && *p.{{.Name}}),
+                            {{ else }} p.{{.Name}},
+                            {{- end }}
+                        {{- end }}
+                    {{- end }}
+                }, nil
+            }),
+        )
+        return err
+    }
+
+    // --- PATH B: FALLBACK (Standard Batch Insert) ---
+    // Used if we are in a transaction or not using Postgres
+    flatPtr := common.FlatArgPool.Get().(*[]any)
+    flat := (*flatPtr)[:0]
+    defer func() {
+        *flatPtr = flat
+        common.FlatArgPool.Put(flatPtr)
+    }()
+
+    isPG := s.DB.Dialector.Name() == "postgres"
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
+
+    rows := make([][]any, count)
+    {{ $colCount := 0 -}}
+    {{- range .Fields -}}{{ if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") }}{{ $colCount = add $colCount 1 }}{{ end }}{{ end -}}
+    const colCount = {{ $colCount }}
+
+    for i := 0; i < count; i++ {
+        p := &posted_{{.LowerName}}s[i]
+        startIdx := len(flat)
+        {{ if $break_3 }}u, _ := uuid.NewV7(); uStr := u.String();{{- end }}
+        {{- range .Fields }}{{ if eq .Name "Password" }}hashedPassword, _ := models.HashPassword(*p.Password);{{ end }}{{ end }}
+
+        {{- range .Fields }}
+            {{- if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") }}
+                {{ if eq .Name "Password" }} flat = append(flat, hashedPassword)
+                {{ else if eq .Name "UUID" }} flat = append(flat, uStr)
+                {{ else if eq .Type "bool" }} flat = append(flat, (p.{{.Name}} != nil && *p.{{.Name}}))
+                {{ else }} flat = append(flat, p.{{.Name}})
+                {{- end }}
+            {{- end }}
+        {{- end }}
+        rows[i] = flat[startIdx : startIdx+colCount]
+    }
+
+    qb.BatchInsert("{{.LowerName}}s", {{.LowerName}}InsertColumns, rows...).
+        SetExpr("created_at", "CURRENT_TIMESTAMP")
+
+    query, args, err := qb.ToSql()
+    if err != nil { return err }
+
+    switch t := tx.(type) {
+    case pgx.Tx:
+        _, err = t.Exec(ctx, query, args...)
+    case *sql.Tx:
+        _, err = t.ExecContext(ctx, query, args...)
+    default:
+        _, err = s.SQLC.ExecContext(ctx, query, args...)
+    }
+    return err
+}   

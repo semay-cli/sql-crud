@@ -11,7 +11,7 @@ import (
 	{{- if $break_math }}
 
 	{{ end }}
-	"strconv"
+	//"strconv"
 	"github.com/gofiber/fiber/v3"
 	"{{.ProjectName}}/common"
 	"{{.ProjectName}}/{{.AppName}}/models"
@@ -35,16 +35,23 @@ var (
 {{- range .SearchFields}}
 // @Param {{ . | getBase }} query string false "Search by {{ . | getBase }} optional field string"
 {{- end}}
-// @Success 200 {object} common.ResponsePagination{data=[]models.{{.Name}}Get}
-// @Failure 404 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponsePagination[[]models.{{.Name}}Get]{data=[]models.{{.Name}}Get}
+// @Failure 404 {object} common.ResponseHTTP[any]{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}} [get]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx fiber.Ctx) error {
 	
-
-	
+	// Access the low-level fasthttp args
+	args := contx.Request().URI().QueryArgs()
     //  parsing Query Prameters
-	Page, _ := strconv.Atoi(contx.Query("page"))
-	Limit, _ := strconv.Atoi(contx.Query("size"))
+	Page := 1
+	if v, err := args.GetUint("page"); err == nil {
+		Page = int(v)
+	}
+
+	Limit := 10
+	if v, err := args.GetUint("size"); err == nil {
+		Limit = int(v)
+	}
 
 	// initalize resp
 	resp_err := common.GetResponseHTTP()
@@ -119,8 +126,8 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx fiber.C
 // @Accept json
 // @Produce json
 // @Param {{.LowerName}}_id path string true "{{.Name}} ID"
-// @Success 200 {object} common.ResponseHTTP{data=models.{{.Name}}Get}
-// @Failure 404 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponseHTTP[models.{{.Name}}Get]{data=models.{{.Name}}Get}
+// @Failure 404 {object} common.ResponseHTTP[any]{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [get]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}ByID(contx fiber.Ctx) error {
 	
@@ -166,9 +173,9 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}ByID(contx fibe
 // @Accept json
 // @Produce json
 // @Param {{.LowerName}} body models.{{.Name}}Post true "Add {{.Name}}"
-// @Success 200 {object} common.ResponseHTTP{data=models.{{.Name}}Post}
-// @Failure 400 {object} common.ResponseHTTP{}
-// @Failure 500 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponseHTTP[models.{{.Name}}Post]{data=models.{{.Name}}Post}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
+// @Failure 500 {object} common.ResponseHTTP[any]{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}} [post]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx fiber.Ctx) error {
 	
@@ -192,7 +199,9 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx fiber.C
 	}
 
 	// then validate structure
-	if err := ctrl.Validator.Struct(posted_{{.LowerName}}); err != nil {
+	validator := getValidator()
+	defer putValidator(validator)
+	if err := validator.Struct(posted_{{.LowerName}}); err != nil {
 		resp.Message = err.Error()
 		resp.Success = false
 		resp.Data = nil
@@ -229,9 +238,9 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx fiber.C
 // @Produce json
 // @Param {{.LowerName}} body models.{{.Name}}Patch true "Patch {{.Name}}"
 // @Param {{.LowerName}}_id path string true "{{.Name}} ID"
-// @Success 200 {object} common.ResponseHTTP{data=models.{{.Name}}Patch}
-// @Failure 400 {object} common.ResponseHTTP{}
-// @Failure 500 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponseHTTP[models.{{.Name}}Get]{data=models.{{.Name}}Patch}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
+// @Failure 500 {object} common.ResponseHTTP[any]{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [patch]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx fiber.Ctx) error {
 	
@@ -259,7 +268,10 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx fiber.
 	}
 
     // then validate structure
-	if err := ctrl.Validator.Struct(patch_{{.LowerName}}); err != nil {
+	validator := getValidator()
+	defer putValidator(validator)
+
+	if err := validator.Struct(patch_{{.LowerName}}); err != nil {
 		resp.Message = err.Error()
 		resp.Success = false
 		resp.Data = nil
@@ -297,9 +309,9 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx fiber.
 // @Accept json
 // @Produce json
 // @Param {{.LowerName}}_id path string true "{{.Name}} ID"
-// @Success 200 {object} common.ResponseHTTP{}
-// @Failure 404 {object} common.ResponseHTTP{}
-// @Failure 503 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponseHTTP[any]{}
+// @Failure 404 {object} common.ResponseHTTP[any]{}
+// @Failure 503 {object} common.ResponseHTTP[any]{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [delete]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.Name}}(contx fiber.Ctx) error {
 	

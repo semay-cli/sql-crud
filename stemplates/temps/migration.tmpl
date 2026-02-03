@@ -27,9 +27,15 @@ func TimePtr(b time.Time) *time.Time {
 	return &b
 }
 
+func StrPtr(t time.Time) *string {
+	s := t.Format(time.RFC3339) // e.g., "2026-01-27T14:45:00Z"
+	return &s
+}
+
 func InitDatabase(test_flag bool, cfg *configs.EnvConfig,logger *logs.Logger) {
 
-	db, err  := database.ReturnSession("{{ .AppName | replaceString }}",cfg,logger)
+	dbbundle, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
+	db:= dbbundle.Gorm
 	if err != nil {
 		panic(err)
 	}
@@ -56,7 +62,8 @@ func InitDatabase(test_flag bool, cfg *configs.EnvConfig,logger *logs.Logger) {
 
 func CleanDatabase(test_flag bool,  cfg *configs.EnvConfig, logger *logs.Logger) {
 
-	db, err := database.ReturnSession("{{ .AppName | replaceString }}",cfg,logger)
+	dbbundle, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
+	db:= dbbundle.Gorm
 	if err == nil {
 		fmt.Println("Connection Opened to Database")
 		fmt.Println("Dropping Models if Exist")
@@ -77,7 +84,8 @@ func CleanDatabase(test_flag bool,  cfg *configs.EnvConfig, logger *logs.Logger)
 {{ if eq .AuthAppName .AppName }}
 func CreateSuperUser( cfg *configs.EnvConfig, logger *logs.Logger) {
 
-	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
+	dbbundle, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
+	db:= dbbundle.Gorm
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -93,7 +101,7 @@ func CreateSuperUser( cfg *configs.EnvConfig, logger *logs.Logger) {
 		LastName:      "User",
 		Username:      "superuser",
 		Password:      hashedPassword,
-		DateRegistred: TimePtr(time.Now()),
+		DateRegistered: TimePtr(time.Now()),
 		Disabled:      BoolPtr(false),
 		UUID:          uuid_uuid.String(),
 		CreatedAt:     TimePtr(time.Now()),
@@ -110,7 +118,8 @@ func CreateSuperUser( cfg *configs.EnvConfig, logger *logs.Logger) {
 
 func ResourceMigration( cfg *configs.EnvConfig, logger *logs.Logger) {
 
-	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
+	dbbundle, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
+	db:= dbbundle.Gorm
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 		return
@@ -270,7 +279,8 @@ func ResourceMigration( cfg *configs.EnvConfig, logger *logs.Logger) {
 func ResourceMigration(cfg *configs.EnvConfig,logger *logs.Logger) {
 
 
-	db, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
+	dbbundle, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
+	db:= dbbundle.Gorm
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 		return

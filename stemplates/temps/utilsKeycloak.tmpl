@@ -1,7 +1,14 @@
 package utils
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+
 	"{{.ProjectName}}/configs"
+	
 )
 
 type KeycloakClient struct {
@@ -21,50 +28,54 @@ func NewKeycloakClient(cfg configs.Config, apiClient *ApiClient) *KeycloakClient
 	}
 }
 
-// TokenIntrospectionResponse represents the response from K/C introspection endpoint.
+// TokenIntrospectionResponse represents the response from Keycloak introspection endpoint.
 type TokenIntrospectionResponse struct {
-	Active    bool   `json:"active"`
-	Scope     string `json:"scope"`
-	ClientId  string `json:"client_id"`
-	Username  string `json:"username"`
-	TokenType string `json:"token_type"`
-	Exp       int64  `json:"exp"`
-	Iat       int64  `json:"iat"`
-	Nbf       int64  `json:"nbf"`
-	Sub       string `json:"sub"`
+	Active      bool                `json:"active"`
+	Scope       string              `json:"scope"`
+	ClientId    string              `json:"client_id"`
+	Username    string              `json:"username"`
+	TokenType   string              `json:"token_type"`
+	Exp         int64               `json:"exp"`
+	Iat         int64               `json:"iat"`
+	Sub         string              `json:"sub"`
+	RealmAccess RealmAccessResponse `json:"realm_access"`
 }
 
-// ValidateToken introspects a token to check if it's active.
-func (k *KeycloakClient) ValidateToken(token, clientID, clientSecret string) (*TokenIntrospectionResponse, error) {
-	// url := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token/introspect", k.BaseURL, k.Realm)
-	//
-	// headers := map[string]string{
-	// 	"Content-Type": "application/x-www-form-urlencoded",
-	// }
+type RealmAccessResponse struct {
+	Roles []string `json:"roles"`
+}
 
-	// We need to send form-encoded body, but ApiClient currently sends JSON.
-	// For robustness, we might need to extend ApiClient to support form encoding,
-	// or handled it manually here. Given the prompt asked for "robust ApiClient... can send requests form map",
-	// let's assume we might construct the form string or handle it differently.
-	// However, for standard Keycloak introspection, it's POST form-data.
-	// To keep `utils/apiclient` generic for JSON, we might need a separate method for Form or just pass raw bytes.
-	// But let's check if ApiClient supports raw body? It accepts `any` and marshals to JSON if not nil.
-	// We need to support `application/x-www-form-urlencoded`.
+// ValidateToken checks if a token is valid with Keycloak using form-urlencoded POST.
+func (k *KeycloakClient) ValidateToken(ctx context.Context, token, clientID, clientSecret string) (*TokenIntrospectionResponse, error) {
+	// 1. Construct the Keycloak OIDC introspection endpoint
+	endpoint := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token/introspect", k.BaseURL, k.Realm)
 
-	// FOR NOW: Simplification - Using a map and assuming ApiClient will support generic map -> JSON,
-	// but Keycloak needs FORM. I will modify this to use standard generic Send but we might fail on Content-Type if we force JSON.
-	// Let's implement a simplified version or assume ApiClient will be enhanced later?
-	// Actually, I should just stick to JSON generic client for now as per instructions unless I modify ApiClient to support Form.
-	// But Keycloak usually wants Form.
-	// Let's create a Form payload and pass it?
-	// The prompt said "generic... can send requests form map".
-	// Let's assume for this task JSON is primary target, but for KC we might need to skip ApiClient helper if it forces JSON provided we don't change ApiClient.
-	// BUT, the plan says "Integration using ApiClient".
+	// 2. Prepare form-encoded payload
+	form := url.Values{}
+	form.Set("token", token)
+	form.Set("client_id", clientID)
+	form.Set("client_secret", clientSecret)
 
-	// Let's stick to the prompt structure.
-	// Ideally ApiClient should handle different content types.
-	// I will just stub the validation logic to show integration structure.
+	// 3. Set specific headers for Keycloak
+	headers := map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	}
 
-	// Stub implementation demonstrating structure:
-	return &TokenIntrospectionResponse{Active: true, Username: "stub_user"}, nil
+	var introResponse TokenIntrospectionResponse
+
+	// 4. Send using the generic ApiClient
+	err := k.ApiClient.Send(
+		ctx,
+		http.MethodPost,
+		endpoint,
+		headers,
+		strings.NewReader(form.Encode()), // Passed as io.Reader to avoid JSON marshaling
+		&introResponse,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &introResponse, nil
 }

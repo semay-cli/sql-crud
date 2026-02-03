@@ -3,6 +3,17 @@ BODY_LIMIT=70
 READ_BUFFER_SIZE=40
 RATE_LIMIT_PER_SECOND=5000
 
+PREFORK=true
+# Set PG_BOUNCER=true when Postgres is behind PgBouncer (transaction/statement mode)
+PG_BOUNCER=true
+# so requests don't queue for a connection. Example: pool_size=300, 8 procs -> PG_POOL_MAX_CONNS=35.
+PG_POOL_MAX_CONNS=16
+PG_POOL_MIN_CONNS=12
+# PPROF_ENABLED=false disables /debug/pprof for max throughput (set true to capture heap)
+PPROF_ENABLED=true
+# Optional: TRACE_SQL_QUERIES=true logs every SQL query (expensive under load)
+#TRACE_SQL_QUERIES=true
+
 #Interval in minutes
 CLEAR_LOGS_INTERVAL=120
 # JWT token settings

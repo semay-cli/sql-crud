@@ -22,7 +22,7 @@ import (
 // @Description {{.Name}} type information
 type {{.Name}} struct {
     {{- range .Fields}} {{if .ForeignKeyModel }} {{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
-     {{ .ForeignKeyModel }} *{{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else }}  {{.Name}} {{if or (eq .Type "bool") (eq .Type "time.Time") }}*{{- end}}{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}}
+     {{ .ForeignKeyModel }} {{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else if eq .Type "time.Time" }}  {{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- else }}  {{.Name}} {{if eq .Type "bool" }}*{{- end}}{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}}
 	{{end}}
 	CreatedAt *time.Time {{.BackTick}}bson:"created_at,omitempty"{{.BackTick}}
     UpdatedAt *time.Time {{.BackTick}}bson:"updated_at,omitempty"{{.BackTick}}
@@ -72,14 +72,14 @@ func (m *{{.Name}}) CopyTo(target *{{.Name}}Get) {
 // @Description {{.Name}}Post type information
 type {{.Name}}Post struct {
   	{{- range .Fields}}{{- if .Post}} {{if .ForeignKeyModel }} {{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
-     {{ .ForeignKeyModel }} *{{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else }}  {{.Name}} {{ if or (eq .Type "bool") (eq .Type "time.Time") }}*{{- end}}{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}}{{- end}}
+     {{ .ForeignKeyModel }} {{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else if eq .Type "time.Time" }}  {{.Name}} *time.Time {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- else }}   {{.Name}} {{ if eq .Type "bool"}}{{- end}}*{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}}{{- end}}
 {{end}}}
 
 // {{.Name}}Get model info
 // @Description {{.Name}}Get type information
 type {{.Name}}Get struct {
-	{{- range .Fields}} {{- if .Get}}{{if .ForeignKeyModel }} {{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
-     {{ .ForeignKeyModel }} *{{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else }}  {{.Name}} {{ if or (eq .Type "bool") (eq .Type "time.Time") }}*{{- end}}{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}} {{- end}}
+	{{- range .Fields}} {{- if .Get}}{{if .ForeignKeyModel }} {{.Name}} uint{{.BackTick}}{{.Annotation}}{{.BackTick}}
+     {{ .ForeignKeyModel }} {{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else if eq .Type "time.Time" }}  {{.Name}} *time.Time {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- else }}  {{.Name}} {{ if or (eq .Type "bool")}}*{{- end}}{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}} {{- end}}
 	{{end}}
 	CreatedAt *time.Time {{.BackTick}}bson:"created_at,omitempty"{{.BackTick}}
 	UpdatedAt *time.Time {{.BackTick}}bson:"updated_at,omitempty"{{.BackTick}}
@@ -88,13 +88,13 @@ type {{.Name}}Get struct {
 // {{.Name}}Put model info
 // @Description {{.Name}}Put type information
 type {{.Name}}Put struct {
-	{{range .Fields}} {{- if .Put}} {{.Name}} *{{.Type}}  {{.BackTick}}{{.Annotation}} required:"false"{{.BackTick}}{{- end}}
+	{{range .Fields}} {{- if .Put}} {{.Name}} {{- if eq .Type "time.Time" }} *time.Time {{else}} *{{.Type}} {{- end }}  {{.BackTick}}{{.Annotation}} required:"false"{{.BackTick}}{{- end}}
 {{end}}}
 
 // {{.Name}}Patch model info
 // @Description {{.Name}}Patch type information
 type {{.Name}}Patch struct {
-	{{range .Fields}}{{- if .Patch}}{{.Name}} *{{.Type}}  {{.BackTick}}{{.Annotation}} required:"false"{{.BackTick}}{{- end}}
+	{{range .Fields}}{{- if .Patch}}{{.Name}} {{- if eq .Type "time.Time" }} *time.Time {{else}} *{{.Type}} {{- end }} {{.BackTick}}{{.Annotation}} required:"false"{{.BackTick}}{{- end}}
 {{end}}}
 
 

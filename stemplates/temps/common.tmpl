@@ -5,13 +5,13 @@ import "sync"
 var (
 	responseHTTPPool = sync.Pool{
 		New: func() any {
-			return &ResponseHTTP{}
+			return &ResponseHTTP[any]{}
 		},
 	}
 
 	responsePaginationPool = sync.Pool{
 		New: func() any {
-			return &ResponsePagination{}
+			return &ResponsePagination[any]{}
 		},
 	}
 
@@ -22,20 +22,21 @@ var (
 	}
 )
 
-type ResponseHTTP struct {
-	Success bool        `json:"success"`
-	Data    interface{} `json:"data"`
-	Message string      `json:"details"`
+// Use Generics to avoid interface{} boxing allocations
+type ResponseHTTP[T any] struct {
+	Success bool   `json:"success"`
+	Data    T      `json:"data"`
+	Message string `json:"details"`
 }
 
-type ResponsePagination struct {
-	Success bool        `json:"success"`
-	Items   interface{} `json:"data"`
-	Message string      `json:"details"`
-	Total   uint        `json:"total"`
-	Page    uint        `json:"page"`
-	Size    uint        `json:"size"`
-	Pages   uint        `json:"pages"`
+type ResponsePagination[T any] struct {
+	Success bool   `json:"success"`
+	Items   T      `json:"data"`
+	Message string `json:"details"`
+	Total   uint   `json:"total"`
+	Page    uint   `json:"page"`
+	Pages   uint   `json:"pages"`
+	Size    uint   `json:"size"`
 }
 
 // Generic function to filter the map based on a list of allowed keys.
@@ -67,7 +68,6 @@ func FilterMapInPlace[T any](input map[string]T, allowedKeys []string) {
 	}
 }
 
-
 // Generic function to filter the map based on a list of allowed keys.
 func FilterSearchTerms(input map[string]any, allowedKeys []string) []string {
 	filtered := make([]string, 0)
@@ -82,12 +82,12 @@ func FilterSearchTerms(input map[string]any, allowedKeys []string) []string {
 }
 
 // GetResponseHTTP gets a ResponseHTTP from the pool.
-func GetResponseHTTP() *ResponseHTTP {
-	return responseHTTPPool.Get().(*ResponseHTTP)
+func GetResponseHTTP() *ResponseHTTP[any] {
+	return responseHTTPPool.Get().(*ResponseHTTP[any])
 }
 
 // PutResponseHTTP resets and returns a ResponseHTTP to the pool.
-func PutResponseHTTP(r *ResponseHTTP) {
+func PutResponseHTTP(r *ResponseHTTP[any]) {
 	r.Success = false
 	r.Data = nil
 	r.Message = ""
@@ -95,12 +95,12 @@ func PutResponseHTTP(r *ResponseHTTP) {
 }
 
 // GetResponsePagination gets a ResponsePagination from the pool.
-func GetResponsePagination() *ResponsePagination {
-	return responsePaginationPool.Get().(*ResponsePagination)
+func GetResponsePagination() *ResponsePagination[any] {
+	return responsePaginationPool.Get().(*ResponsePagination[any])
 }
 
 // PutResponsePagination resets and returns a ResponsePagination to the pool.
-func PutResponsePagination(r *ResponsePagination) {
+func PutResponsePagination(r *ResponsePagination[any]) {
 	r.Success = false
 	r.Items = nil
 	r.Message = ""
@@ -110,7 +110,6 @@ func PutResponsePagination(r *ResponsePagination) {
 	r.Pages = 0
 	responsePaginationPool.Put(r)
 }
-
 
 // GetSearchMap gets a map[string,T] from the pool.
 func GetSearchMap() map[string]string {
@@ -126,4 +125,12 @@ func PutSearchMap(m map[string]string) {
 		delete(m, k)
 	}
 	searchMapPool.Put(m)
+}
+
+// argPool handles the heavy lifting of the data to avoid GC scans of thousands of small objects
+var FlatArgPool = sync.Pool{
+	New: func() any {
+		s := make([]any, 0, 1024)
+		return &s
+	},
 }

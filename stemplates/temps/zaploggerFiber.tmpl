@@ -1,11 +1,13 @@
 package logs
 
 import (
+	"context"
 	"io"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/labstack/gommon/log"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -94,14 +96,14 @@ func NewZapLogger() *Logger {
 		Size:          64 * 1024,
 		FlushInterval: 1 * time.Second,
 	}
-	
+
 	infoCore := zapcore.NewCore(
-	encoder,
-	infoBuffered,
-	zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl < zap.ErrorLevel && lvl >= atomicLevel.Level()
-	}),
-)
+		encoder,
+		infoBuffered,
+		zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return lvl < zap.ErrorLevel && lvl >= atomicLevel.Level()
+		}),
+	)
 
 	errorCore := zapcore.NewCore(
 		encoder,
@@ -143,6 +145,20 @@ func (l *Logger) GetZapLogger() *zap.Logger {
 /* ===================== */
 /* Optimized Log Methods */
 /* ===================== */
+
+func (z *Logger) TraceQueryStart(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	z.logger.Debug("Executing query",
+		zap.String("sql", data.SQL),
+		zap.Any("args", data.Args),
+	)
+	return ctx
+}
+
+func (z *Logger) TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryEndData) {
+	if data.Err != nil {
+		z.logger.Error("Query failed", zap.Error(data.Err))
+	}
+}
 
 func (l *Logger) Infow(msg string, keysAndValues ...any) {
 	l.sugar.Infow(msg, keysAndValues...)
@@ -307,4 +323,3 @@ func (l *Logger) PanicjInternal(j log.JSON) {
 	l.logger.Panic("panic", fields...)
 	zapFieldPool.Put(fields)
 }
-

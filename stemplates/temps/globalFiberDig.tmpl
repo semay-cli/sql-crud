@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"log"
+	"net/http"
+	"strconv"
+	 _ "net/http/pprof"
 
 
 	{{- range .AppNames}}
@@ -24,6 +28,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/idempotency"
 	//"github.com/gofiber/fiber/v3/middleware/limiter"
+	"github.com/gofiber/fiber/v3/middleware/pprof"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/static"
 	"github.com/prometheus/client_golang/prometheus"
@@ -31,7 +36,6 @@ import (
 	"github.com/spf13/cobra"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/dig"
-	"gorm.io/gorm"
 )
 
 var (
@@ -62,6 +66,9 @@ var (
 
 				/// starting shceduled tasks
 				if !fiber.IsChild() {
+					go func() {
+						log.Println(http.ListenAndServe("localhost:6060", nil))
+					}()
 					deps.Scheduler.Start()
 				}
 
@@ -85,26 +92,54 @@ var (
 
 // ----------------- Fiber App Setup -----------------
 func NewFiberApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrace.Tracer, prom *prometheus.Registry) *fiber.App {
-	//initalize 
-	app := fiber.New()
+	// App config for throughput: body limit and read buffer from env (values in KB if < 4096)
+	bodyLimit := 4 * 1024 * 1024 // 4MB default
+	if v, err := strconv.Atoi(cfg.GetOrDefault("BODY_LIMIT", "0")); err == nil && v > 0 {
+		if v < 4096 {
+			bodyLimit = v * 1024
+		} else {
+			bodyLimit = v
+		}
+	}
+	readBufferSize := 4096
+	if v, err := strconv.Atoi(cfg.GetOrDefault("READ_BUFFER_SIZE", "0")); err == nil && v > 0 {
+		if v < 4096 {
+			readBufferSize = v * 1024
+		} else {
+			readBufferSize = v
+		}
+	}
+	writeBufferSize := 4096
+	if v, err := strconv.Atoi(cfg.GetOrDefault("WRITE_BUFFER_SIZE", "0")); err == nil && v > 0 {
+		if v < 4096 {
+			writeBufferSize = v * 1024
+		} else {
+			writeBufferSize = v
+		}
+	}
+	app := fiber.New(fiber.Config{
+		BodyLimit:       bodyLimit,
+		ReadBufferSize:  readBufferSize,
+		WriteBufferSize: writeBufferSize,
+	})
+
+	// pprof: disable (PPROF_ENABLED=false) for max throughput when benchmarking 150K+ RPS
+	if cfg.GetOrDefault("PPROF_ENABLED", "true") == "true" {
+		app.Use(pprof.New())
+	}
 
 	// Recovery middleware to catch panics
 	app.Use(recover.New())
+	app.Use(FullChainMiddlewareOp(appTracer))
+	app.Use(FiberZapLogger(logger))
 
-	// adaptive Rate limiter(tweak your app based on your db pooling and server setting to find you sweet spot)	
-	limiter := NewAdaptiveLimiter(5, 7, 2000*time.Microsecond,false)
+	// adaptive Rate limiter(tweak your app based on your db pooling and server setting to find you sweet spot)
+	limiter := NewAdaptiveLimiter(5, 23, 5000*time.Microsecond, false)
 	app.Use(limiter.Handle)
 
 	// idempotency middleware
 	app.Use(idempotency.New())
 	
-
-
-	// Full chain middleware: CORS, headers, tracing, etc.
-	app.Use(FullChainMiddleware(appTracer))
-
-	//zap  logger
-	app.Use(FiberZapLogger(logger))
 
 	//If fiber default Rate limiting(uncomment the below and comment the above)
 	//rateLimit, _ := strconv.ParseFloat(cfg.GetOrDefault("RATE_LIMIT_PER_SECOND", "50000"), 64)
@@ -133,7 +168,7 @@ func NewFiberApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrac
 	{{- end }}
 
 	{{-  if eq .AuthAppType  "standalone" }}
-	app.Get("/", static.New("./dist/django_admin_ui"))
+	app.Get("/adm/*", static.New("./dist/django_admin_ui"))
 
 	app.Get("/admin/*", func(ctx fiber.Ctx) error {
 		return ctx.SendFile("./dist/django_admin_ui/index.html")
@@ -141,7 +176,7 @@ func NewFiberApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrac
 
 	{{- end }}	
 	{{- if eq .AuthAppType  "sso" }}
-	app.Get("/*", static.New("./dist/sso_admin_ui"))
+	app.Get("/adm/*", static.New("./dist/sso_admin_ui"))
 
 	app.Get("/admin/*", func(ctx fiber.Ctx) error {
 		return ctx.SendFile("./dist/sso_admin_ui/index.html")
@@ -173,13 +208,17 @@ func waitForShutdown(app *fiber.App, ctx context.Context, logger *logs.Logger) {
 
 func startServer(app *fiber.App, cfg *configs.EnvConfig, logger *logs.Logger) {
 	addr := ":" + cfg.Get("HTTP_PORT")
+	enablePrefork := cfg.GetOrDefault("PREFORK", "false") == "true"
+	if enablePrefork {
+		logger.Info("Prefork enabled for high RPS")
+	}
 	if cfg.GetOrDefault("APP_TLS", "off") == "on" {
 		logger.Fatal("TLS start not implemented")
 	} else {
 		logger.Info("Starting server on", "addr", addr)
-		if err := app.Listen(addr,fiber.ListenConfig{
-			EnablePrefork: false, // ✅ Enable prefork here
-			}); err != nil {
+		if err := app.Listen(addr, fiber.ListenConfig{
+			EnablePrefork: enablePrefork,
+		}); err != nil {
 			logger.Fatal("Server failed:", err)
 		}
 	}
@@ -220,7 +259,7 @@ func buildContainer() *dig.Container {
 
 	{{ range .AppNames}}
 	// Provide named DBs
-	mustProvide(container.Provide(func(cfg *configs.EnvConfig,logger *logs.Logger) (*gorm.DB, error) {
+	mustProvide(container.Provide(func(cfg *configs.EnvConfig,logger *logs.Logger) (*database.DBBundle, error) {
 		return database.ReturnSession("{{ . | replaceString }}", cfg, logger)
 	}, dig.Name("{{ . | replaceString }}_db")))
 	{{- end }}
@@ -231,7 +270,7 @@ func buildContainer() *dig.Container {
 	// Provide {{ . | replaceString }} repository
 	mustProvide(container.Provide(func(in struct {
 		dig.In
-		DB    *gorm.DB `name:"{{ . | replaceString }}_db"`
+		DB    *database.DBBundle `name:"{{ . | replaceString }}_db"`
 		Cache *cache.CacheService
 		Cfg   *configs.EnvConfig
 	}) *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository  {
@@ -246,7 +285,7 @@ func buildContainer() *dig.Container {
     	// Provide {{ . | replaceString }} service
     	mustProvide(container.Provide(func(in struct {
     		dig.In
-    		DB    *gorm.DB `name:"{{ . | replaceString }}_db"`
+    		DB    *database.DBBundle `name:"{{ . | replaceString }}_db"`
     		Cache *cache.CacheService
     		Cfg   *configs.EnvConfig
     		Repo  *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository        `name:"{{ . | replaceString }}_repo"`

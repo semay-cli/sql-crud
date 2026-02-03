@@ -1,371 +1,337 @@
 package repository
 
 import (
-	"context"
-	"fmt"
-	"strconv"
-
-	"{{ .ProjectName }}/{{ .AppName }}/models"
-	  "{{ .ProjectName }}/querybuilder"
-	  "database/sql"
-	
-
+    "context"
+    "fmt"
+    "strconv"
+    "database/sql"
+    "{{ .ProjectName }}/{{ .AppName }}/models"
+    "{{ .ProjectName }}/querybuilder"
+    "github.com/jackc/pgx/v5"
 )
 
-
-
-
 // ##########################################################
-// ##########  Relationship  Services to {{.FieldName}}
+// ##########  Relationship Services to {{.FieldName}}
 // ##########################################################
 
-func (s *{{ .AppName | toPascalCase }}Repository) Add{{.ParentName}}To{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string,tx *sql.Tx) error {
-	// Fetching
-	{{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
-	if err != nil {
-		return err
-	}
-
-	{{.FieldName | toInitials}}ID, err := strconv.Atoi({{.LowerFieldName}}ID)
-	if err != nil {
-		return err
-	}
-
-	
-	isPG := s.DB.Dialector.Name() == "postgres"
-	{{ if .MtM }}
-	qb := querybuilder.GetBuilder(isPG)
-	defer qb.Release()
-		
-	qb.Insert("{{.TableName}}").
-		Columns("{{.LowerParentName }}_id", "{{.LowerFieldName }}_id").
-		Values({{.ParentName | toInitials }}ID, {{.FieldName | toInitials }}ID)
-
-
-	query, args, err := qb.ToSql()
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.ExecContext(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("failed to add user to group: %v", err)
-		}
-	{{- end}}
-
-
-	{{- if .OtM }}
-	// Build Insert
-	qb := querybuilder.GetBuilder(isPG)
-	defer qb.Release()
-		
-	qb.Update("{{.LowerFieldName}}s").
-        Set("{{.LowerParentName}}_id", {{.ParentName | toInitials}}ID).
-        Where("id = ?",{{.FieldName | toInitials}}ID)
-
-
-	query, args, err := qb.ToSql()
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.ExecContext(ctx, query, args...)
-	if err != nil {
-		return err
-		}
-
-	{{- end}}
-
-
-	return nil
-}
-
-func (s *{{ .AppName | toPascalCase }}Repository) Remove{{ .ParentName}}From{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string, tx *sql.Tx) error {
-	{{- if .MtM }}
-	// Fetching
-	{{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
-	if err != nil {
-		return err
-	}
-	{{- end }}
-
-	{{.FieldName | toInitials}}ID, err := strconv.Atoi({{.LowerFieldName}}ID)
-	if err != nil {
-		return err
-	}
-
-	isPG := s.DB.Dialector.Name() == "postgres"	
-	{{ if .MtM }}
-	// Build Insert
-	qb := querybuilder.GetBuilder(isPG)
-	defer qb.Release()
-
-	qb.Delete("{{.TableName}}").
-		Where("{{.LowerParentName }}_id = ?", {{.ParentName | toInitials}}ID).
-		Where("{{.LowerFieldName }}_id = ?", {{.FieldName | toInitials}}ID)
-
-	
-
-	query, args, err := qb.ToSql()
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.ExecContext(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("failed to add user to group: %v", err)
-		}
-	{{- end}}
-
-
-	{{- if .OtM }}
-	// Build Insert
-	qb := querybuilder.GetBuilder(isPG)
-	defer qb.Release()
-
-	qb.Update("{{.LowerFieldName}}s").
-        Set("{{.LowerParentName}}_id", nil).
-        Where("id = ?", {{.FieldName | toInitials}}ID)
-
-
-	query, args, err := qb.ToSql()
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.ExecContext(ctx, query, args...)
-	if err != nil {
-		return err
-		}
-
-	{{- end}}
-
-
-	
-
-	return nil
-}
-
-
-func (s *{{ .AppName | toPascalCase }}Repository) Get{{.ParentName}}{{.FieldName}}s(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, pagination models.Pagination, out *[]models.{{.FieldName}}Get) (uint, error) {
-	{{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
-	if err != nil {
-		return  0,fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
-	}
-	
-	isPG := s.DB.Dialector.Name() == "postgres"
-
-	{{- if  .MtM }}
-	qb := querybuilder.GetBuilder(isPG)
-	defer qb.Release()
-		
-	qb.Select("{{.FieldName | toInitials}}.*", "count(*) OVER() as total_count").
-    	From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
-        JoinArgs("LEFT JOIN {{.TableName }} {{ .TableName | toInitials}} ON {{.FieldName | toInitials}}.id = {{ .TableName | toInitials}}.{{.LowerFieldName}}_id").
-        Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID).
-        OrderBy("{{.FieldName | toInitials}}.id ASC").
-        Limit(pagination.Size).
-        Offset((pagination.Page - 1) * pagination.Size)	
-	
-	{{- end }}
-	{{- if .OtM}}
-	qb := querybuilder.GetBuilder(isPG)
-	defer qb.Release()
-		
-	qb.Select("{{.FieldName | toInitials}}.*", "count(*) OVER() as total_count").
-        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
-        Where("{{.FieldName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID).
-        OrderBy("{{.FieldName | toInitials}}.id ASC").
-        Limit(pagination.Size).
-        Offset((pagination.Page - 1) * pagination.Size)
-	{{- end}}
-
-	
-    query, args, err := qb.ToSql()
+// 1. Add Relationship
+func (s *{{ .AppName | toPascalCase }}Repository) Add{{.ParentName}}To{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string, tx any) error {
+    {{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
     if err != nil {
-        return  0, err
+        return err
     }
 
-	// Reset the slice length to 0 (but keep the pooled capacity)
-	finalitems := (*out)[:0]
+    {{.FieldName | toInitials}}ID, err := strconv.Atoi({{.LowerFieldName}}ID)
+    if err != nil {
+        return err
+    }
 
-    rows, err := s.SQLC.QueryContext(ctx, query, args...)
+    isPG := s.DB.Dialector.Name() == "postgres"
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
+
+    {{ if .MtM }}
+    qb.Insert("{{.TableName}}").
+        Columns("{{.LowerParentName }}_id", "{{.LowerFieldName }}_id").
+        Values({{.ParentName | toInitials }}ID, {{.FieldName | toInitials }}ID)
+    {{- end}}
+
+    {{- if .OtM }}
+    qb.Update("{{.LowerFieldName}}s").
+        Set("{{.LowerParentName}}_id", {{.ParentName | toInitials}}ID).
+        Where("id = ?", {{.FieldName | toInitials}}ID)
+    {{- end}}
+
+    query, args, err := qb.ToSql()
+    if err != nil {
+        return err
+    }
+
+    switch t := tx.(type) {
+    case pgx.Tx:
+        _, err = t.Exec(ctx, query, args...)
+    case *sql.Tx:
+        _, err = t.ExecContext(ctx, query, args...)
+    default:
+        if s.NativePool != nil {
+            _, err = s.NativePool.Exec(ctx, query, args...)
+        } else {
+            _, err = s.SQLC.ExecContext(ctx, query, args...)
+        }
+    }
+    return err
+}
+
+// 2. Remove Relationship
+func (s *{{ .AppName | toPascalCase }}Repository) Remove{{ .ParentName}}From{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string, tx any) error {
+    {{- if .MtM }}
+    {{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+    if err != nil {
+        return err
+    }
+    {{- end }}
+
+    {{.FieldName | toInitials}}ID, err := strconv.Atoi({{.LowerFieldName}}ID)
+    if err != nil {
+        return err
+    }
+
+    isPG := s.DB.Dialector.Name() == "postgres" 
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
+
+    {{ if .MtM }}
+    qb.Delete("{{.TableName}}").
+        Where("{{.LowerParentName }}_id = ?", {{.ParentName | toInitials}}ID).
+        Where("{{.LowerFieldName }}_id = ?", {{.FieldName | toInitials}}ID)
+    {{- end}}
+
+    {{- if .OtM }}
+    qb.Update("{{.LowerFieldName}}s").
+        Set("{{.LowerParentName}}_id", nil).
+        Where("id = ?", {{.FieldName | toInitials}}ID)
+    {{- end}}
+
+    query, args, err := qb.ToSql()
+    if err != nil {
+        return err
+    }
+
+    switch t := tx.(type) {
+    case pgx.Tx:
+        _, err = t.Exec(ctx, query, args...)
+    case *sql.Tx:
+        _, err = t.ExecContext(ctx, query, args...)
+    default:
+        if s.NativePool != nil {
+            _, err = s.NativePool.Exec(ctx, query, args...)
+        } else {
+            _, err = s.SQLC.ExecContext(ctx, query, args...)
+        }
+    }
+    return err
+}
+
+// 3. Get Relationship (Paginated)
+func (s *{{ .AppName | toPascalCase }}Repository) Get{{.ParentName}}{{.FieldName}}s(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, pagination models.Pagination, out *[]models.{{.FieldName}}Get) (uint, error) {
+    {{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+    if err != nil {
+        return 0, fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
+    }
+    
+    isPG := s.DB.Dialector.Name() == "postgres"
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
+
+    {{- if .MtM }}
+    qb.Select("{{.FieldName | toInitials}}.*", "count(*) OVER() as total_count").
+        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
+        JoinArgs("LEFT JOIN {{.TableName }} {{ .TableName | toInitials}} ON {{.FieldName | toInitials}}.id = {{ .TableName | toInitials}}.{{.LowerFieldName}}_id").
+        Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID)
+    {{- end }}
+    {{- if .OtM}}
+    qb.Select("{{.FieldName | toInitials}}.*", "count(*) OVER() as total_count").
+        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
+        Where("{{.FieldName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID)
+    {{- end}}
+
+    qb.OrderBy("{{.FieldName | toInitials}}.id ASC").
+        Limit(pagination.Size).
+        Offset((pagination.Page - 1) * pagination.Size) 
+    
+    query, args, err := qb.ToSql()
     if err != nil {
         return 0, err
     }
-    defer rows.Close()
 
-
-	item := models.{{.FieldName}}GetPool.Get()
+    finalitems := (*out)[:0]
     var totalCount int64
-    for rows.Next() {
-        
-        err := rows.Scan(
-		  {{- range .ResponseModel.Fields}}{{- if ne .DBType  "None"}} 
-            &item.{{.Name}},
-          {{- end }}{{- end }}
-          &item.UpdatedAt,
-          &item.CreatedAt,
-            &totalCount,
-        )
-		finalitems = append(finalitems, *item)
-        if err != nil {
-			models.{{.FieldName}}GetPool.Put(item)
-            return 0, err
+
+    item := models.{{.FieldName}}GetPool.Get()
+    defer models.{{.FieldName}}GetPool.Put(item)
+
+    if s.NativePool != nil {
+        rows, err := s.NativePool.Query(ctx, query, args...)
+        if err != nil { return 0, err }
+        defer rows.Close()
+        for rows.Next() {
+            err := rows.Scan(
+                {{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
+                &item.UpdatedAt, &item.CreatedAt, &totalCount,
+            )
+            finalitems = append(finalitems, *item)
+            if err != nil {
+                item.Reset()
+                return 0,err
+            }
+            item.Reset()
         }
-		finalitems = append(finalitems, *item)
-		item.Reset()
+    } else {
+        rows, err := s.SQLC.QueryContext(ctx, query, args...)
+        if err != nil { return 0, err }
+        defer rows.Close()
+        for rows.Next() {
+        
+            err := rows.Scan(
+                {{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
+                &item.UpdatedAt, &item.CreatedAt, &totalCount,
+            )
+            finalitems = append(finalitems, *item)
+            if err != nil {
+                item.Reset()
+                return 0,err
+            }
+            item.Reset()
+        }
     }
-	models.{{.FieldName}}GetPool.Put(item)
-	*out = finalitems
-
-	return uint(totalCount), nil
+    
+    *out = finalitems
+    return uint(totalCount), nil
 }
-// #########################
-// No Pagination Services###
-// #########################
 
-func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string,out *[]models.{{.FieldName}}Get) error {
-	
+// 4. Get All (No Pagination)
+func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, out *[]models.{{.FieldName}}Get) error {
+    {{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+    if err != nil {
+        return fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
+    }
+    
+    isPG := s.DB.Dialector.Name() == "postgres"
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
 
-	{{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
-	if err != nil {
-		return  fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
-	}
-	
-	isPG := s.DB.Dialector.Name() == "postgres"
-	{{- if  .MtM }}
-	qb := querybuilder.GetBuilder(isPG)
-	defer qb.Release()
-		
-	qb.Select("{{.FieldName | toInitials}}.*").
+    {{- if .MtM }}
+    qb.Select("{{.FieldName | toInitials}}.*").
         From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
         Join("JOIN {{.TableName }} {{ .TableName | toInitials}} ON {{.FieldName | toInitials}}.id = {{ .TableName | toInitials}}.{{.LowerFieldName}}_id").
         Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
-
-	
-	{{- end }}
-	{{- if .OtM}}
-	qb := querybuilder.GetBuilder(isPG)
-	defer qb.Release()
-
-	qb.Select("{{.FieldName | toInitials}}.*").
+    {{- end }}
+    {{- if .OtM}}
+    qb.Select("{{.FieldName | toInitials}}.*").
         From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
         Where("{{.FieldName | toInitials}}.{{.LowerParentName}}_id = ? ", {{.ParentName | toInitials}}ID).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
-	{{- end}}
+    {{- end}}
 
-	
     query, args, err := qb.ToSql()
     if err != nil {
         return err
     }
 
-	// Reset the slice length to 0 (but keep the pooled capacity)
-	finalitems := (*out)[:0]
-
-    rows, err := s.SQLC.QueryContext(ctx, query, args...)
-    if err != nil {
-        return err
-    }
-    defer rows.Close()
-
-
     item := models.{{.FieldName}}GetPool.Get()
-    for rows.Next() {
-        err := rows.Scan(
-		  {{- range .ResponseModel.Fields}}{{- if ne .DBType  "None"}} 
-            &item.{{.Name}},
-          {{- end }}{{- end }}
-          &item.UpdatedAt,
-          &item.CreatedAt,
-        )
+    defer models.{{.FieldName}}GetPool.Put(item)
 
-		finalitems = append(finalitems, *item)
-		
-        if err != nil {
-			models.{{.FieldName}}GetPool.Put(item)
-            return  err
+    finalitems := (*out)[:0]
+    if s.NativePool != nil {
+        rows, err := s.NativePool.Query(ctx, query, args...)
+        if err != nil { return err }
+        defer rows.Close()
+        for rows.Next() {
+            err := rows.Scan(
+                {{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
+                &item.UpdatedAt, &item.CreatedAt,
+            )
+            finalitems = append(finalitems, *item)
+            if err != nil {
+                item.Reset()
+                return err
+            }
+            item.Reset()
         }
-		item.Reset()
-		   
+    } else {
+        rows, err := s.SQLC.QueryContext(ctx, query, args...)
+        if err != nil { return err }
+        defer rows.Close()
+        for rows.Next() {
+            
+            err := rows.Scan(
+                {{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
+                &item.UpdatedAt, &item.CreatedAt,
+            )
+            finalitems = append(finalitems, *item)
+            if err != nil {
+                item.Reset()
+                return err
+            }
+            item.Reset()
+        }
     }
-	models.{{.FieldName}}GetPool.Put(item)
-	*out = finalitems
-	
-	
-
-	return nil
+    *out = finalitems
+    return nil
 }
 
+// 5. Get Missing Relationships
+func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, out *[]models.{{.FieldName}}Get) error {
+    {{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
+    if err != nil {
+        return fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
+    }
+        
+    isPG := s.DB.Dialector.Name() == "postgres"
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
 
-func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string,out *[]models.{{.FieldName}}Get) error {
-	
-	
-	{{.ParentName | toInitials}}ID, err := strconv.Atoi({{.ParentName | toLowerCaseName}}ID)
-	if err != nil {
-		return  fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
-	}
-		
-	isPG := s.DB.Dialector.Name() == "postgres"
-	{{- if  .MtM }}
-	qb := querybuilder.GetBuilder(isPG)
-	defer qb.Release()
-
-	qb.Select("{{.FieldName | toInitials}}.*").
+    {{- if .MtM }}
+    qb.Select("{{.FieldName | toInitials}}.*").
         From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
         JoinArgs("LEFT JOIN {{.TableName }} {{ .TableName | toInitials}} ON {{.FieldName | toInitials}}.id = {{ .TableName | toInitials}}.{{.LowerFieldName}}_id AND {{ .TableName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID).
-        Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id IS NULL",nil).
+        Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id IS NULL", nil).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
-
-	
-	{{- end }}
-	{{- if .OtM}}
-	qb := querybuilder.GetBuilder(isPG)
-	defer qb.Release()
-		
-	qb.Select("{{.FieldName | toInitials}}.*", ).
+    {{- end }}
+    {{- if .OtM}}
+    qb.Select("{{.FieldName | toInitials}}.*").
         From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
         Where("({{.FieldName | toInitials}}.{{.LowerParentName}}_id IS NULL OR {{.FieldName | toInitials}}.{{.LowerParentName}}_id <> ?)", {{.ParentName | toInitials}}ID).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
-	{{- end}}
+    {{- end}}
 
     query, args, err := qb.ToSql()
     if err != nil {
         return err
     }
 
-	// Reset the slice length to 0 (but keep the pooled capacity)
-	finalitems := (*out)[:0]
-
-
-    rows, err := s.SQLC.QueryContext(ctx, query, args...)
-    if err != nil {
-        return  err
-    }
-    defer rows.Close()
+    finalitems := (*out)[:0]
 
     item := models.{{.FieldName}}GetPool.Get()
-    for rows.Next() {
-        err := rows.Scan(
-		  {{- range .ResponseModel.Fields}}{{- if ne .DBType  "None"}} 
-            &item.{{.Name}},
-          {{- end }}{{- end }}
-          &item.UpdatedAt,
-          &item.CreatedAt,        
-        )
+    defer models.{{.FieldName}}GetPool.Put(item)
 
-		finalitems = append(finalitems, *item)
-        if err != nil {
-			models.{{.FieldName}}GetPool.Put(item)	
-            return  err
+    if s.NativePool != nil {
+        rows, err := s.NativePool.Query(ctx, query, args...)
+        if err != nil { return err }
+        defer rows.Close()
+        for rows.Next() {
+            
+            err := rows.Scan(
+                {{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
+                &item.UpdatedAt, &item.CreatedAt,
+            )
+
+            finalitems = append(finalitems, *item)
+            if err != nil {
+                item.Reset()
+                return err
+            }
+            item.Reset()
         }
-		item.Reset()
-
+    } else {
+        rows, err := s.SQLC.QueryContext(ctx, query, args...)
+        if err != nil { return err }
+        defer rows.Close()
+        for rows.Next() {
+           
+            err := rows.Scan(
+                {{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
+                &item.UpdatedAt, &item.CreatedAt,
+            )
+            finalitems = append(finalitems, *item)
+            if err != nil {
+                item.Reset()
+                return err
+            }
+            item.Reset()
+        }
     }
-	models.{{.FieldName}}GetPool.Put(item)
-	*out = finalitems
-
-	return nil
+    *out = finalitems
+    return nil
 }

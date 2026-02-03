@@ -1,15 +1,21 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
     "regexp"
 	"{{ .ProjectName }}/cache"
 	"{{ .ProjectName }}/configs"
-	db "{{ .ProjectName }}/{{ .AppName}}/sqlc"
+	"{{ .ProjectName }}/database"
+	db "{{ .ProjectName }}/{{ .AppName}}/sqlc"	
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"gorm.io/gorm"
 )
 
-
+type rowScanner interface {
+	Scan(dest ...any) error
+}
 
 // AppDatabase Service wraps Dababase service(SQL)
 type {{ .AppName | toPascalCase }}Repository struct {
@@ -17,6 +23,7 @@ type {{ .AppName | toPascalCase }}Repository struct {
 	DB *gorm.DB
 	Cache *cache.CacheService
 	Queries      *db.Queries 
+	NativePool   *pgxpool.Pool
 	Cfg   *configs.EnvConfig
 	ForeignRegex *regexp.Regexp
     NumberRegex  *regexp.Regexp
@@ -24,18 +31,31 @@ type {{ .AppName | toPascalCase }}Repository struct {
 
 
 
-func InitRepository(client *gorm.DB, cacheService *cache.CacheService, cfg *configs.EnvConfig) *{{ .AppName | toPascalCase }}Repository {
-	sqlDB, _ := client.DB() // Extract standard sql.DB from GORM
-	queries := db.New(sqlDB)
+func InitRepository(client *database.DBBundle , cacheService *cache.CacheService, cfg *configs.EnvConfig) *{{ .AppName | toPascalCase }}Repository {
 	
 	return &{{ .AppName | toPascalCase }}Repository{
-		SQLC:         sqlDB,
-		DB:    client,
-		Cache: cacheService,
-		Queries:      queries,
+		SQLC:         client.SQL,
+		DB:           client.Gorm,
+		Cache:        cacheService,
+		Queries:      db.New(client.SQL),
+		NativePool:   client.PGX,
 		Cfg:   cfg,
-        ForeignRegex: regexp.MustCompile(`(?i)_id$`), // Prepare regex to check for *_id pattern
-        NumberRegex:  regexp.MustCompile(`^\d+$`),
 	}
 
+}
+
+// wrapTx provides a unified interface for QueryRow regardless of driver
+func (s *BlueAdminRepository) execQueryRow(ctx context.Context, tx any, query string, args ...any) rowScanner {
+	switch t := tx.(type) {
+	case pgx.Tx:
+		return t.QueryRow(ctx, query, args...)
+	case *sql.Tx:
+		return t.QueryRowContext(ctx, query, args...)
+	default:
+		// Fallback to pool/connection if no transaction provided
+		if s.NativePool != nil {
+			return s.NativePool.QueryRow(ctx, query, args...)
+		}
+		return s.SQLC.QueryRowContext(ctx, query, args...)
+	}
 }

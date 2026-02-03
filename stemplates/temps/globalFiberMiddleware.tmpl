@@ -3,6 +3,7 @@ package manager
 
 import (
 	"sync"
+	"strings"
 
 	"{{.ProjectName}}/observe"
 	"github.com/gofiber/fiber/v3"
@@ -110,15 +111,27 @@ func FullChainMiddleware(appTracer oteltrace.Tracer) fiber.Handler {
 		// ------------------------------------------------------------------
 		// Start OTel span
 		// ------------------------------------------------------------------
-		traceCtx, span := observe.FiberAppSpanner(c, path, appTracer)
+		statusCode := c.Response().StatusCode()
+		if statusCode >= 400 {
 
-		rt := tracerPool.Get().(*observe.RouteTracer)
-		rt.Ctx = traceCtx
-		rt.Span = span
-		ac.Tracer = rt
+			traceCtx, span := observe.FiberAppSpanner(c, path, appTracer)
 
-		// This attaches your OTel context to the Fiber Ctx
-		c.SetContext(traceCtx)
+			rt := tracerPool.Get().(*observe.RouteTracer)
+			rt.Ctx = traceCtx
+			rt.Span = span
+			ac.Tracer = rt
+
+			defer func() {
+
+				span.End()
+				rt.Ctx = nil
+				rt.Span = nil
+				tracerPool.Put(rt)
+			}()
+
+			// This attaches your OTel context to the Fiber Ctx
+			c.SetContext(traceCtx)
+		}
 
 		// ------------------------------------------------------------------
 		// Request headers
@@ -136,19 +149,42 @@ func FullChainMiddleware(appTracer oteltrace.Tracer) fiber.Handler {
 		// ------------------------------------------------------------------
 		// Next handler
 		// ------------------------------------------------------------------
+		//err := c.Next()
+
+		
+		return c.Next()
+		//return err
+	}
+}
+// ------------------------------------------------------------------
+// Full chain middleware optimized (Fiber)
+// ------------------------------------------------------------------
+
+func FullChainMiddlewareOp(appTracer oteltrace.Tracer) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		path := c.Path() // Path() is faster than Route().Path for initial checks
+
+		// Fast-path bypass for common infra routes
+		if path == "/health" || strings.HasPrefix(path, "/metrics") || strings.HasPrefix(path, "/adm") {
+			return c.Next()
+		}
+
+		// CORS - Static headers don't need recalculation
+		res := c.Response()
+		res.Header.Set("Access-Control-Allow-Origin", "*")
+		res.Header.Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+
+		if c.Method() == fiber.MethodOptions {
+			return c.SendStatus(fiber.StatusNoContent)
+		}
+
+		// Only trigger OTel logic if sampled or on error to save CPU
 		err := c.Next()
 
-		// ------------------------------------------------------------------
-		// Cleanup
-		// ------------------------------------------------------------------
-		span.End()
-		rt.Ctx = nil
-		rt.Span = nil
-		tracerPool.Put(rt)
-
-		ac.C = nil
-		ac.Tracer = nil
-		appContextPool.Put(ac)
+		if err != nil || c.Response().StatusCode() >= 400 {
+			_, span := appTracer.Start(c.Context(), path)
+			defer span.End()
+		}
 
 		return err
 	}

@@ -1,73 +1,81 @@
 package services
 
 import (
-	"context"
-	"fmt"
-	"{{ .ProjectName }}/{{ .AppName }}/models"
-	 "database/sql"
-	
+    "context"
+    "fmt"
+    "database/sql"
+    "{{ .ProjectName }}/{{ .AppName }}/models"
+    "github.com/jackc/pgx/v5"
 )
 
-
-
-
 // ##########################################################
-// ##########  Relationship  Services to {{.FieldName}}
+// ##########  Relationship Services to {{.FieldName}}
 // ##########################################################
 
 func (s *{{ .AppName | toPascalCase }}Service) Add{{.ParentName}}To{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string) error {
+    // If using Postgres Native Pool, use Native Transaction
+    if s.Repo.NativePool != nil {
+        return s.WithNativeTransaction(ctx, func(tx pgx.Tx) error {
+            if err := s.Repo.Add{{.ParentName}}To{{.FieldName}}(ctx, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID, tx); err != nil {
+                return fmt.Errorf("failed to associate add relation: %v", err)
+            }
+            return nil
+        })
+    }
 
-	err := s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
-		if err := s.Repo.Add{{.ParentName}}To{{.FieldName}}(ctx,{{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID,tx); err != nil {
-			return fmt.Errorf("failed to associate add relation: %v", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	return nil
+    // Fallback to Standard SQLC Transaction
+    return s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
+        if err := s.Repo.Add{{.ParentName}}To{{.FieldName}}(ctx, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID, tx); err != nil {
+            return fmt.Errorf("failed to associate add relation: %v", err)
+        }
+        return nil
+    })
 }
 
 func (s *{{ .AppName | toPascalCase }}Service) Remove{{ .ParentName}}From{{.FieldName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID string) error {
+    // If using Postgres Native Pool, use Native Transaction
+    if s.Repo.NativePool != nil {
+        return s.WithNativeTransaction(ctx, func(tx pgx.Tx) error {
+            if err := s.Repo.Remove{{.ParentName}}From{{.FieldName}}(ctx, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID, tx); err != nil {
+                return fmt.Errorf("failed to associate add relation: %v", err)
+            }
+            return nil
+        })
+    }
 
-		err := s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
-		if err := s.Repo.Remove{{.ParentName}}From{{.FieldName}}(ctx,{{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID,tx); err != nil {
-			return fmt.Errorf("failed to associate add relation: %v", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	return nil
+    // Fallback to Standard SQLC Transaction
+    return s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
+        if err := s.Repo.Remove{{.ParentName}}From{{.FieldName}}(ctx, {{.ParentName | toLowerCaseName}}ID, {{.LowerFieldName}}ID, tx); err != nil {
+            return fmt.Errorf("failed to associate add relation: %v", err)
+        }
+        return nil
+    })
 }
 
-func (s *{{ .AppName | toPascalCase }}Service) Get{{.ParentName}}{{.FieldName}}s(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, pagination models.Pagination,out *[]models.{{.FieldName}}Get) (uint, error) {
-
-	total, err := s.Repo.Get{{.ParentName}}{{.FieldName}}s(ctx, {{.ParentName | toLowerCaseName}}ID, pagination,out )
+func (s *{{ .AppName | toPascalCase }}Service) Get{{.ParentName}}{{.FieldName}}s(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, pagination models.Pagination, out *[]models.{{.FieldName}}Get) (uint, error) {
+    total, err := s.Repo.Get{{.ParentName}}{{.FieldName}}s(ctx, {{.ParentName | toLowerCaseName}}ID, pagination, out)
     if err != nil {
         return 0, fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
     }
-	return  uint(total), nil
+    return uint(total), nil
 }
+
 // #########################
 // No Pagination Services###
 // #########################
 
-func (s *{{ .AppName | toPascalCase }}Service) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string,out *[]models.{{.FieldName}}Get) error {
-
-	err := s.Repo.GetAll{{.FieldName}}sFor{{.ParentName}}(ctx, {{.ParentName | toLowerCaseName}}ID, out)
+func (s *{{ .AppName | toPascalCase }}Service) GetAll{{.FieldName}}sFor{{.ParentName}}(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, out *[]models.{{.FieldName}}Get) error {
+    err := s.Repo.GetAll{{.FieldName}}sFor{{.ParentName}}(ctx, {{.ParentName | toLowerCaseName}}ID, out)
     if err != nil {
         return fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
     }
-	return nil
+    return nil
 }
 
-func (s *{{ .AppName | toPascalCase }}Service) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string,out *[]models.{{.FieldName}}Get) error {
-	err := s.Repo.GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx, {{.ParentName | toLowerCaseName}}ID,out)
+func (s *{{ .AppName | toPascalCase }}Service) GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx context.Context, {{.ParentName | toLowerCaseName}}ID string, out *[]models.{{.FieldName}}Get) error {
+    err := s.Repo.GetAll{{.FieldName}}s{{.ParentName | toLowerCaseName}}DoesNotHave(ctx, {{.ParentName | toLowerCaseName}}ID, out)
     if err != nil {
-        return  fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
+        return fmt.Errorf("failed to get {{.LowerFieldName}}s: %v", err)
     }
-	return  nil
+    return nil
 }

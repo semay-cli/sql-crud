@@ -50,6 +50,7 @@ func GenerateControllersFiber(data stemplates.Data) {
 
 func GenerateControllerInit(data stemplates.Data) {
 	inittmpl := stemplates.LoadTemplate("initControllers")
+	validatortmpl := stemplates.LoadTemplate("validator")
 	if err := os.MkdirAll("controllers", os.ModePerm); err != nil {
 		panic("could not create directory")
 	}
@@ -60,5 +61,6 @@ func GenerateControllerInit(data stemplates.Data) {
 	}
 	stemplates.WriteTemplateToFile("concurrency/executor.go", tmplConcurent, data)
 	stemplates.WriteTemplateToFile("controllers/init.go", inittmpl, data)
+	stemplates.WriteTemplateToFile("controllers/validator.go", validatortmpl, data)
 
 }

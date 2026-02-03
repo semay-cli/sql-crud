@@ -13,6 +13,7 @@ import (
 
 	"{{ .ProjectName }}/{{ $.AppName }}/models"
 	 "database/sql"
+     "github.com/jackc/pgx/v5"
 
 )
 
@@ -20,21 +21,23 @@ import (
 
 // Create inserts a new {{.LowerName}}
 func (s *{{ .AppName | toPascalCase }}Service) Create{{.Name}}(ctx context.Context, posted_{{.LowerName}} *models.{{.Name}}Post,out *models.{{.Name}}) error {
-
-	err := s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
+    if s.Repo.NativePool != nil {
+	    return  s.WithNativeTransaction(ctx, func(tx pgx.Tx) error {
 			err := s.Repo.Create{{.Name}}(ctx, posted_{{.LowerName}}, tx, out)
             if err != nil {
                 return fmt.Errorf("{{.LowerName}} creation failed: %v", err)
             }
-        
 			return nil
-		})
+        })        
+	}
+    
+    return  s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
+        err := s.Repo.Create{{.Name}}(ctx, posted_{{.LowerName}}, tx, out)
         if err != nil {
-           return  err
+            return fmt.Errorf("{{.LowerName}} creation failed: %v", err)
         }
-
-
-		return  err
+        return nil
+    })
 }
 
 // GetOne fetches a {{.LowerName}} by ID
@@ -66,23 +69,24 @@ func (s *{{ .AppName | toPascalCase }}Service) Update{{.Name}}(ctx context.Conte
     if err != nil {
         return fmt.Errorf("invalid ID: %v", err)
     }
+    if s.Repo.NativePool != nil {
+        return  s.WithNativeTransaction(ctx, func(tx pgx.Tx) error {
 
-	err = s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
+            err = s.Repo.Update{{.Name}}(ctx, id , patch_{{.LowerName}}, tx,out)
+            if err != nil {
+                return fmt.Errorf("{{.LowerName}} update failed: %v", err)
+            }
+            return nil
+        })
+	}
 
-        
+	return  s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {  
         err = s.Repo.Update{{.Name}}(ctx, id , patch_{{.LowerName}}, tx,out)
         if err != nil {
             return fmt.Errorf("{{.LowerName}} update failed: %v", err)
         }
-        
         return nil
     })
-
-	if err != nil {
-        return err
-    }
-
-	return err
 }
 
 // Delete removes a {{.LowerName}} by ID
@@ -92,17 +96,20 @@ func (s *{{ .AppName | toPascalCase }}Service) Delete{{.Name}}(ctx context.Conte
     if err != nil {
         return fmt.Errorf("invalid ID: %v", err)
     }
+    if s.Repo.NativePool != nil {
+        return s.WithNativeTransaction(ctx, func(tx pgx.Tx) error {
+            if err := s.Repo.Delete{{.Name}}(ctx, id, tx); err != nil {
+                return fmt.Errorf("{{.LowerName}} deletion failed: %v", err)
+            }
+            return nil
+	    })
+	}
 
-	err = s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
-        
-		if err := s.Repo.Delete{{.Name}}(ctx, id, tx); err != nil {
+    return s.WithSqlcTransaction(ctx, func(tx *sql.Tx) error {
+        if err := s.Repo.Delete{{.Name}}(ctx, id, tx); err != nil {
             return fmt.Errorf("{{.LowerName}} deletion failed: %v", err)
         }
-		return nil
+        return nil
 	})
-	if err != nil {
-        return err
-    }
-
-	return err
+	
 }

@@ -3,6 +3,19 @@ BODY_LIMIT=70
 READ_BUFFER_SIZE=40
 RATE_LIMIT_PER_SECOND=5000
 
+PREFORK=true
+# Set PG_BOUNCER=true when Postgres is behind PgBouncer (transaction/statement mode)
+PG_BOUNCER=true
+# so requests don't queue for a connection. Example: pool_size=300, 8 procs -> PG_POOL_MAX_CONNS=35.
+PG_POOL_MAX_CONNS=16
+PG_POOL_MIN_CONNS=12
+# PPROF_ENABLED=false disables /debug/pprof for max throughput (set true to capture heap)
+PPROF_ENABLED=true
+# Optional: TRACE_SQL_QUERIES=true logs every SQL query (expensive under load)
+#TRACE_SQL_QUERIES=true
+READ_BUFFER_SIZE=8
+WRITE_BUFFER_SIZE=8
+
 #Interval in minutes
 CLEAR_LOGS_INTERVAL=120
 # JWT token settings
@@ -43,7 +56,7 @@ TRACER_SAMPLE="0.1"
 ###################################################
 # Local Cache Settings for Ristoretto
 ###################################################
-NUMBER_OF_COUNTERS=10000000
+NUMBER_OF_COUNTERS=1000
 MAX_CACHE_SIZE=50
 BUFFER_ITEMS=64  # Allowed Maximum Concurrent Requests
 TIME_TO_LIVE=10  #in minutes
@@ -57,10 +70,10 @@ APP_NAME=dev
 {{ . | replaceStringCapitalize }}_TEST_NAME="Development Development"
 
 #Database config settings
-#{{ . | replaceStringCapitalize }}_DB_TYPE=postgres
-#{{ . | replaceStringCapitalize }}_POSTGRES_URI="host=localhost user=blueuser password=default dbname=learning_one port=5432 sslmode=disable"
-{{ . | replaceStringCapitalize }}_DB_TYPE="sqlite"
-{{ . | replaceStringCapitalize }}_SQLLITE_URI="{{ . | replaceString}}_blue.db"
+{{ . | replaceStringCapitalize }}_DB_TYPE=postgres
+{{ . | replaceStringCapitalize }}_POSTGRES_URI="host=localhost user=bushu password=default@123 dbname=blue_local port=6432 sslmode=disable"
+#{{ . | replaceStringCapitalize }}_DB_TYPE="sqlite"
+#{{ . | replaceStringCapitalize }}_SQLLITE_URI="{{ . | replaceString}}_blue.db"
 #{{ . | replaceStringCapitalize }}_DB_TYPE="mongodb"
 #{{ . | replaceStringCapitalize }}_MONGODB_URI="yourmongouri"
 #{{ . | replaceStringCapitalize }}_DB_TYPE="mysql"

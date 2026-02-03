@@ -6,15 +6,17 @@ import (
 	"log"
 	"os"
 	"strings"
+	"context"
+	"strconv"
 	"time"
 
 	"{{ .ProjectName }}/configs"
 	"{{ .ProjectName }}/logs" // Import your Zap logger package
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/stdlib"
-
-	// "github.com/lib/pq"
-
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	
 	"github.com/mattn/go-sqlite3"
 	sqldblogger "github.com/simukti/sqldb-logger"
 	"github.com/simukti/sqldb-logger/logadapter/zapadapter"
@@ -26,12 +28,19 @@ import (
 	"gorm.io/plugin/opentelemetry/tracing"
 )
 
+type DBBundle struct {
+    Gorm *gorm.DB
+    SQL  *sql.DB
+    PGX  *pgxpool.Pool // only set for postgres
+}
+
+
 func LoggerFile(app_name string) (*os.File, error) {
 	log_file_name := app_name + "_gorm.log"
 	return os.OpenFile(log_file_name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 }
 
-func ReturnSession(app_name string, cfg *configs.EnvConfig, zapLogger *logs.Logger) (*gorm.DB, error) {
+func ReturnSession(app_name string, cfg *configs.EnvConfig, zapLogger *logs.Logger) (*DBBundle, error) {
 	env_name := strings.ToUpper(app_name) + "_DB_TYPE"
 	app_env := cfg.Get(env_name)
 
@@ -55,6 +64,7 @@ func ReturnSession(app_name string, cfg *configs.EnvConfig, zapLogger *logs.Logg
 		DBSession *gorm.DB
 		sqlDB     *sql.DB
 		err       error
+		nativePool *pgxpool.Pool
 	)
 
 	// Universal switch for all three databases
@@ -62,21 +72,52 @@ func ReturnSession(app_name string, cfg *configs.EnvConfig, zapLogger *logs.Logg
 	case "postgres":
 		dsn := cfg.Get(strings.ToUpper(app_name) + "_POSTGRES_URI")
 
-		if debugSQL {
-			adapter := zapadapter.New(zapLogger.GetZapLogger())
-			// Pass stdlib.GetDefaultDriver() for pgx
-			sqlDB = sqldblogger.OpenDriver(dsn, stdlib.GetDefaultDriver(), adapter)
-		} else {
-			// HIGH PERFORMANCE MODE: Direct open
-			sqlDB, err = sql.Open("pgx", dsn)
+		// Create the Native PGX Pool
+		poolConfig, err := pgxpool.ParseConfig(dsn)
+		if err != nil {
+			return nil, err
+		}
+		// Pool size: env PG_POOL_MAX_CONNS / PG_POOL_MIN_CONNS (defaults 100/89 for throughput).
+		// With prefork, total conns = numProcesses × MaxConns; keep PgBouncer max_connections in mind.
+		poolConfig.MaxConns = 100
+		if v := cfg.Get("PG_POOL_MAX_CONNS"); v != "" {
+			if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n > 0 {
+				poolConfig.MaxConns = int32(n)
+			}
+		}
+		poolConfig.MinConns = 89
+		if v := cfg.Get("PG_POOL_MIN_CONNS"); v != "" {
+			if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n > 0 && n <= int(poolConfig.MaxConns) {
+				poolConfig.MinConns = int32(n)
+			}
+		}
+		poolConfig.MaxConnIdleTime = 5 * time.Minute
+
+		// PgBouncer (transaction/statement mode) does not preserve server-side prepared
+		usePgBouncer := strings.EqualFold(strings.TrimSpace(cfg.Get("PG_BOUNCER")), "true")
+		if usePgBouncer {
+			poolConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 		}
 
-		if err == nil {
-			DBSession, err = gorm.Open(gormPostgres.New(gormPostgres.Config{
-				Conn:                 sqlDB,
-				PreferSimpleProtocol: true,
-			}), &gorm.Config{Logger: newLogger, SkipDefaultTransaction: true})
+		// Only attach query tracer when explicitly enabled (TRACE_SQL_QUERIES=true).
+		// Avoids ~325MB alloc under load from TraceQueryStart when DEBUG_SQL is on.
+		traceSQLQueries := strings.EqualFold(strings.TrimSpace(cfg.Get("TRACE_SQL_QUERIES")), "true")
+		if debugSQL && traceSQLQueries {
+			poolConfig.ConnConfig.Tracer = zapLogger
 		}
+
+		nativePool, err = pgxpool.NewWithConfig(context.Background(), poolConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		// Now, derive the sql.DB for GORM from the pool to share connections
+		sqlDB = stdlib.OpenDBFromPool(nativePool)
+
+		DBSession, err = gorm.Open(gormPostgres.New(gormPostgres.Config{
+			Conn:                 sqlDB,
+			PreferSimpleProtocol: usePgBouncer, // must match pgx when behind PgBouncer
+		}), &gorm.Config{Logger: newLogger, SkipDefaultTransaction: true, PrepareStmt: false})	
 
 	case "mysql":
 		dsn := cfg.Get(strings.ToUpper(app_name) + "_MYSQL_URI")
@@ -120,16 +161,22 @@ func ReturnSession(app_name string, cfg *configs.EnvConfig, zapLogger *logs.Logg
 		return nil, err
 	}
 
-	// Apply Pool Settings
-	if app_env == "sqlite" {
-		sqlDB.SetMaxOpenConns(1)
-		sqlDB.SetConnMaxLifetime(5 * time.Second)
-	} else {
-		sqlDB.SetMaxOpenConns(100)
-		sqlDB.SetMaxIdleConns(80)
-		sqlDB.SetConnMaxLifetime(30 * time.Minute)
-	}
+		switch app_env {
+		case "sqlite":
+			sqlDB.SetMaxOpenConns(1)
+			sqlDB.SetConnMaxLifetime(5 * time.Second)
+		case "mysql":
+			sqlDB.SetMaxOpenConns(200)
+			sqlDB.SetMaxIdleConns(100)
+			sqlDB.SetConnMaxLifetime(10 * time.Minute)
+		default:
 
+		}
 	_ = DBSession.Use(tracing.NewPlugin())
-	return DBSession, nil
+	
+	return &DBBundle{
+		Gorm: DBSession,
+		SQL:  sqlDB,
+		PGX:  nativePool,
+	}, nil
 }

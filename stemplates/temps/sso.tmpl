@@ -52,7 +52,7 @@
           },
           {
             "name": "AppID",
-            "type": "sql.NullInt64",
+            "type": "*uint",
             "annotation": "gorm:\"foreignkey:AppID OnDelete:SET NULL\" json:\"app_id,omitempty\" swaggertype:\"number\"",
             "curd_flag": "true$false$false$false$true$false",
             "db_type": "INTEGER REFERENCES apps(id) ON DELETE SET NULL"
@@ -186,7 +186,7 @@
             "db_type": "TEXT NOT NULL"
           },
           {
-            "name": "DateRegistred",
+            "name": "DateRegistered",
             "type": "time.Time",
             "annotation": "gorm:\"constraint:not null; default:current_timestamp;\" json:\"date_registered,omitempty\"",
             "curd_flag": "true$true$true$true$false$false",
@@ -329,7 +329,7 @@
           },
           {
             "name": "ScopeID",
-            "type": "sql.NullInt64",
+            "type": "*uint",
             "annotation": "gorm:\"foreignkey:ScopeID OnDelete:SET NULL\" json:\"scope_id,omitempty\" swaggertype:\"number\"",
             "curd_flag": "true$false$false$false$true$false",
             "db_type" : "INTEGER REFERENCES scopes(id) ON DELETE SET NULL"

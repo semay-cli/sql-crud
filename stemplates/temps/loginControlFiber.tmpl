@@ -35,9 +35,9 @@ type TokenResponse struct {
 // @Accept json
 // @Produce json
 // @Param user body LoginPost true "Login"
-// @Success 202 {object} common.ResponseHTTP{data=TokenResponse{}}
-// @Failure 404 {object} common.ResponseHTTP{}
-// @Failure 503 {object} common.ResponseHTTP{}
+// @Success 202 {object} common.ResponseHTTP[any]{data=TokenResponse{}}
+// @Failure 404 {object} common.ResponseHTTP[any]{}
+// @Failure 503 {object} common.ResponseHTTP[any]{}
 // @Router /{{.CurrentAppName | replaceString}}/login [post]
 func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx fiber.Ctx) error {
 
@@ -47,7 +47,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx fiber.Ct
 	//first parse request data
 	if err := contx.Bind().Body(&login_request); err != nil {
 
-		return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP{
+		return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP[any]{
 			Success: false,
 			Message: err.Error(),
 			Data:    nil,
@@ -55,8 +55,11 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx fiber.Ct
 	}
 
 	// then validate structure
-	if err := ctrl.Validator.Struct(login_request); err != nil {
-		return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP{
+	validator := getValidator()
+	defer putValidator(validator)
+	
+	if err := validator.Struct(login_request); err != nil {
+		return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP[any]{
 			Success: false,
 			Message: err.Error(),
 			Data:    nil,
@@ -67,7 +70,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx fiber.Ct
 	case "authorization_code":
 		token, err := repo.Login(login_request.Email, login_request.Password,contx.Context())
 		if err != nil {
-			return common.SendJSON(contx,fiber.StatusUnauthorized, common.ResponseHTTP{
+			return common.SendJSON(contx,fiber.StatusUnauthorized, common.ResponseHTTP[any]{
 				Success: false,
 				Message: err.Error(),
 				Data:    nil,
@@ -83,7 +86,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx fiber.Ct
 		}
 		// Optionally update last login
 		//repo.DB.WithContext(contx.Request().Context()).Model(&models.User{}).Where("id = ?", claims.UserID).Update("last_login", time.Now())
-		return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP{
+		return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP[any]{
 			Success: true,
 			Message: "Authorization Granted",
 			Data:    data,
@@ -91,7 +94,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx fiber.Ct
 	case "refresh_token":
 		newToken, err := repo.RefreshToken(login_request.Token)
 		if err != nil {
-			return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP{
+			return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP[any]{
 				Success: false,
 				Message: err.Error(),
 				Data:    nil,
@@ -104,7 +107,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx fiber.Ct
 			RefreshToken: refreshString,
 			TokenType:    "Bearer",
 		}
-		return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP{
+		return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP[any]{
 			Success: true,
 			Message: "Token refreshed",
 			Data:    data,
@@ -112,19 +115,19 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx fiber.Ct
 	case "token_decode":
 		claims, err := repo.DecodeToken(login_request.Token)
 		if err != nil {
-			return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP{
+			return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP[any]{
 				Success: false,
 				Message: err.Error(),
 				Data:    nil,
 			})
 		}
-		return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP{
+		return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP[any]{
 			Success: true,
 			Message: "Token decode successful",
 			Data:    claims,
 		})
 	default:
-		return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP{
+		return common.SendJSON(contx,fiber.StatusBadRequest, common.ResponseHTTP[any]{
 			Success: false,
 			Message: "Unknown grant type",
 			Data:    nil,
@@ -140,14 +143,14 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx fiber.Ct
 // @Tags Authentication
 // @Security ApiKeyAuth
 // @Produce json
-// @Success 200 {object} common.ResponseHTTP{data=map[string]interface{}}
-// @Failure 401 {object} common.ResponseHTTP
-// @Failure 500 {object} common.ResponseHTTP
+// @Success 200 {object} common.ResponseHTTP[any]{data=map[string]any}
+// @Failure 401 {object} common.ResponseHTTP[any]{}
+// @Failure 500 {object} common.ResponseHTTP[any]{}
 // @Router /{{.CurrentAppName | replaceString}}/user/details [get]
 func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) GetUserDetails(contx fiber.Ctx) error {
 	authHeader := contx.Get("X-APP-TOKEN")
 	if authHeader == "" {
-		return common.SendJSON(contx,fiber.StatusUnauthorized, common.ResponseHTTP{
+		return common.SendJSON(contx,fiber.StatusUnauthorized, common.ResponseHTTP[any]{
 			Success: false,
 			Message: "missing authorization header",
 		})
@@ -158,13 +161,13 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) GetUserDetails(contx
 
 	userDetails, err := ctrl.Svc.GetUserDetails(tokenString)
 	if err != nil {
-		return common.SendJSON(contx,fiber.StatusInternalServerError, common.ResponseHTTP{
+		return common.SendJSON(contx,fiber.StatusInternalServerError, common.ResponseHTTP[any]{
 			Success: false,
 			Message: err.Error(),
 		})
 	}
 
-	return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP{
+	return common.SendJSON(contx,fiber.StatusOK, common.ResponseHTTP[any]{
 		Success: true,
 		Message: "User details fetched successfully",
 		Data:    userDetails,

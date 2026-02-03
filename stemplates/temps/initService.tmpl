@@ -6,8 +6,10 @@ import (
 	"regexp"
 	"{{ .ProjectName }}/cache"
 	"{{ .ProjectName }}/configs"
+	"{{ .ProjectName }}/database"
 	"{{ .ProjectName }}/{{ .AppName }}/repository"
 	db "{{ .ProjectName }}/{{ .AppName }}/sqlc"
+	"github.com/jackc/pgx/v5"
 	"gorm.io/gorm"
 )
 
@@ -27,26 +29,21 @@ type {{ .AppName | toPascalCase }}Service struct {
 
 
 
-func InitService(client *gorm.DB, cacheService *cache.CacheService, cfg *configs.EnvConfig, repo *repository.{{ .AppName | toPascalCase }}Repository) *{{ .AppName | toPascalCase }}Service {
-    sqlDB, _ := client.DB() // Extract standard sql.DB from GORM
-	queries := db.New(sqlDB)
-
+func InitService(client *database.DBBundle, cacheService *cache.CacheService, cfg *configs.EnvConfig, repo *repository.{{ .AppName | toPascalCase }}Repository) *{{ .AppName | toPascalCase }}Service {
+  
 	return &{{ .AppName | toPascalCase }}Service{
-        SQLC:  sqlDB,
-		DB:    client,
-		Cache: cacheService,
-        Queries: queries,
-		Cfg:   cfg,
-		Repo:  repo,
-        ForeignRegex: regexp.MustCompile(`(?i)_id$`), // Prepare regex to check for *_id pattern
-        NumberRegex:  regexp.MustCompile(`^\d+$`),
-
+        SQLC:         client.SQL,
+		DB:           client.Gorm,
+		Cache:        cacheService,
+		Queries:      db.New(client.SQL),
+		Cfg:          cfg,
+		Repo:         repo,
 	}
 
 }
 
 // Utility function for transactions
-func (s *{{ .AppName | toPascalCase }}Service ) withTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
+func (s *{{ .AppName | toPascalCase }}Service ) WithTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
     // Start the transaction with context (e.g., tracing)
     tx := s.DB.WithContext(ctx).Begin()
     if tx.Error != nil {
@@ -96,4 +93,25 @@ func (s *{{ .AppName | toPascalCase }}Service) WithSqlcTransaction(ctx context.C
 
 	// Commit the transaction if no errors occurred
 	return tx.Commit()
+}
+
+
+func (s *{{ .AppName | toPascalCase }}Service) WithNativeTransaction(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	tx, err := s.Repo.NativePool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback(ctx)
+		}
+	}()
+
+	if err := fn(tx); err != nil {
+		tx.Rollback(ctx)
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
