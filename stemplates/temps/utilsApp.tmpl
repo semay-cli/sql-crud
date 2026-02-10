@@ -177,3 +177,19 @@ func GenerateSnowflake10(node *snowflake.Node) string {
 	}
 	return  id
 }
+
+func sPtr(s string) *string { return &s }
+
+func boolPtr(b bool) *bool  { return &b }
+
+func timePtr(b time.Time) *time.Time {
+	return &b
+}
+
+func parseTime(s string) time.Time {
+    t, err := time.Parse(time.RFC3339, s)
+    if err != nil {
+        return time.Now() // Fallback to current time if parsing fails
+    }
+    return t
+}

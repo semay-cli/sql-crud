@@ -1,0 +1,183 @@
+package repository
+
+import (
+    "context"
+    "os"
+    "testing"
+
+    "{{ .ProjectName }}/{{ .AppName }}/models"
+    "{{ .ProjectName }}/cache"
+    "{{ .ProjectName }}/configs"
+    "{{ .ProjectName }}/database"
+    "{{ .ProjectName }}/logs"
+)
+
+func setup{{ .Name }}TestRepo(t *testing.T) (*{{ .AppName | toPascalCase }}Repository, func()) {
+    os.Setenv("{{ .AppName | replaceStringCapitalize }}_DB_TYPE", "sqlite")
+    os.Setenv("{{ .AppName | replaceStringCapitalize }}_SQLLITE_URI", ":memory:")
+
+    cfg, _ := configs.NewEnvConfig()
+    logger := logs.NewZapLogger()
+
+    bundle, err := database.ReturnSession("{{ .AppName | replaceString }}", cfg, logger)
+    if err != nil {
+        t.Fatalf("failed to connect to test db: %v", err)
+    }
+
+    // Initialize schema
+    if err := bundle.Gorm.AutoMigrate(&models.{{ .Name }}{}); err != nil {
+        t.Fatalf("failed to migrate: %v", err)
+    }
+
+    cacheSvc, _ := cache.NewCacheService(cfg)
+    repo := InitRepository(bundle, cacheSvc, cfg)
+
+    cleanup := func() {
+        os.Unsetenv("{{ .AppName | replaceStringCapitalize }}_DB_TYPE")
+        os.Unsetenv("{{ .AppName | replaceStringCapitalize }}_SQLLITE_URI")
+    }
+
+    return repo, cleanup
+}
+
+
+
+func Test{{ .Name }}Repo_CRUD(t *testing.T) {
+    repo, cleanup := setup{{ .Name }}TestRepo(t)
+    defer cleanup()
+
+    ctx := context.Background()
+
+    {{- /* Generate dynamic values for the Post object */ -}}
+    {{- range .Fields }}
+    {{- if .Post }}
+    {{ .LowerName }}Val := {{ .RandomFieldValue }}
+    {{- end }}
+    {{- end }}
+
+    post := &models.{{ .Name }}Post{
+        {{- range .Fields }}
+        {{- if .Post }}
+        {{- if eq .Type "string" }}
+        {{ .Name }}: &{{ .LowerName }}Val,
+        {{- else if eq .Type "bool" }}
+        {{ .Name }}: boolPtr({{ .LowerName }}Val),
+        {{- else if eq .Type "time.Time" }}
+        {{ .Name }}: timePtr(parseTime({{ .LowerName }}Val)),
+        {{- else }}
+        {{ .Name }}: &{{ .LowerName }}Val,
+        {{- end }}
+        {{- end }}
+        {{- end }}
+    }
+
+    // 1. Test Create
+    out := &models.{{ .Name }}{}
+    err := repo.Create{{ .Name }}(ctx, post, nil, out)
+    if err != nil {
+        t.Fatalf("failed to create {{ .LowerName }}: %v", err)
+    }
+    if out.ID == 0 {
+        t.Error("expected ID to be set")
+    }
+
+    // 2. Test GetOne
+    fetched := &models.{{ .Name }}{}
+    err = repo.GetOne{{ .Name }}(ctx, "1", fetched)
+    if err != nil {
+        t.Fatalf("failed to fetch: %v", err)
+    }
+
+    {{- $modelName := .Name -}}
+    {{- range .GetOneFields }}
+    // Test GetBy{{ . | capitalize }}
+    err = repo.Get{{ $modelName }}By{{ . | capitalize }}(ctx, {{ if eq . "uuid" }}out.UUID{{ else }}fetched.{{ . | capitalize }}{{ end }}, fetched)
+    if err != nil {
+        t.Fatalf("failed to fetch by {{ . }}: %v", err)
+    }
+    {{- end }}
+
+    // 3. Test Update
+    {{- if gt (len .Fields) 0 }}
+        {{- $firstField := index .Fields 0 }}
+        {{- if $firstField.Patch }}
+    patchVal := {{ $firstField.RandomFieldValue }}
+    patch := &models.{{ .Name }}Patch{
+        {{- if eq $firstField.Type "time.Time" }}
+        {{ $firstField.Name }}: timePtr(parseTime(patchVal)),
+        {{- else }}
+        {{ $firstField.Name }}: &patchVal,
+        {{- end }}
+    }
+    updated := &models.{{ .Name }}{}
+    err = repo.Update{{ .Name }}(ctx, "1", patch, nil, updated)
+    if err != nil {
+        t.Fatalf("failed to update: %v", err)
+    }
+        {{- end }}
+    {{- end }}
+
+    // 4. Test Delete
+    err = repo.Delete{{ .Name }}(ctx, "1", nil)
+    if err != nil {
+        t.Fatalf("failed to delete: %v", err)
+    }
+
+    // 5. Test Get{{ .Name }}s (Pagination/Search)
+    pagination := models.Pagination{Page: 1, Size: 10}
+    searchTerm := map[string]string{
+        {{- if gt (len .SearchFields) 0 }}
+        "{{ index .SearchFields 0 | getBase }}": "test",
+        {{- end }}
+    }
+    var listOut []models.{{ .Name }}Get
+
+    total, err := repo.Get{{ .Name }}s(ctx, pagination, searchTerm, &listOut)
+    if err != nil {
+        t.Fatalf("failed to list: %v", err)
+    }
+    if total != 0 {
+        t.Errorf("expected 0 total after delete, got %d", total)
+    }
+}
+
+func Test{{ .Name }}Repo_Batch(t *testing.T) {
+    repo, cleanup := setup{{ .Name }}TestRepo(t)
+    defer cleanup()
+
+    ctx := context.Background()
+
+    batchItems := []models.{{ .Name }}Post{
+        {
+            {{- range .Fields }}{{ if .Post }}
+            {{- if eq .Type "string" }}
+            {{ .Name }}: sPtr({{ .RandomFieldValue }}),
+            {{- else if eq .Type "bool" }}
+            {{ .Name }}: boolPtr({{ .RandomFieldValue }}),
+            {{- else if eq .Type "time.Time" }}
+            {{ .Name }}: timePtr(parseTime({{ .RandomFieldValue }})),
+            {{- else }}
+            {{ .Name }}: &([]{{.Type}}{ {{.RandomFieldValue}} }[0]),
+            {{- end }}
+            {{- end }}{{ end }}
+        },
+        {
+            {{- range .Fields }}{{ if .Post }}
+            {{- if eq .Type "string" }}
+            {{ .Name }}: sPtr({{ .RandomFieldValue }}),
+            {{- else if eq .Type "bool" }}
+            {{ .Name }}: boolPtr({{ .RandomFieldValue }}) ,
+            {{- else if eq .Type "time.Time" }}
+            {{ .Name }}: timePtr(parseTime({{ .RandomFieldValue }})),
+            {{- else }}
+            {{ .Name }}: &([]{{.Type}}{ {{.RandomFieldValue}} }[0]),
+            {{- end }}
+            {{- end }}{{ end }}
+        },
+    }
+
+    err := repo.BatchCreate{{ .Name }}s(ctx, batchItems, nil)
+    if err != nil {
+        t.Fatalf("failed to batch create: %v", err)
+    }
+}

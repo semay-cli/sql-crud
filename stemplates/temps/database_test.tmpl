@@ -1,0 +1,47 @@
+package database
+
+import (
+	"os"
+	"testing"
+
+	"{{ .ProjectName }}/configs"
+	"{{ .ProjectName }}/logs"
+)
+
+func TestReturnSession_Sqlite(t *testing.T) {
+	// Setup env for sqlite
+	os.Setenv("TEST_DB_TYPE", "sqlite")
+	os.Setenv("TEST_SQLLITE_URI", ":memory:")
+	defer os.Unsetenv("TEST_DB_TYPE")
+	defer os.Unsetenv("TEST_SQLLITE_URI")
+
+	cfg, _ := configs.NewEnvConfig()
+	logger := logs.NewZapLogger()
+
+	bundle, err := ReturnSession("test", cfg, logger)
+	if err != nil {
+		t.Fatalf("failed to create session: %v", err)
+	}
+
+	if bundle.Gorm == nil {
+		t.Error("expected Gorm session to be initialized")
+	}
+	if bundle.SQL == nil {
+		t.Error("expected SQL db to be initialized")
+	}
+
+	// For sqlite, PGX should be nil
+	if bundle.PGX != nil {
+		t.Error("expected PGX pool to be nil for sqlite")
+	}
+
+	// Verify we can run a query
+	var result int
+	err = bundle.Gorm.Raw("SELECT 1").Scan(&result).Error
+	if err != nil {
+		t.Errorf("failed to run query via Gorm: %v", err)
+	}
+	if result != 1 {
+		t.Errorf("expected 1, got %d", result)
+	}
+}

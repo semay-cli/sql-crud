@@ -188,6 +188,14 @@ func ToCustomPascalCase(s string) string {
 	return result
 }
 
+// Add this helper function
+func firstField(fields []Field) Field {
+	if len(fields) > 0 {
+		return fields[0]
+	}
+	return Field{}
+}
+
 // PascalToSnake converts a PascalCase string to snake_case
 // func PascalToSnake(input string) string {
 // 	// Insert an underscore before all capital letters (except the first)
@@ -398,7 +406,7 @@ var FuncMap = template.FuncMap{
 	"appendSlice":             appendSlice,             // Register appendSlice function
 	"makeSlice":               makeSlice,               // Register makeSlice function
 	"toCustomPascalCase":      ToCustomPascalCase,      // Register toCustomPascalCase function
-
+	"firstField":              firstField,
 }
 
 func add(a int, b int) int {

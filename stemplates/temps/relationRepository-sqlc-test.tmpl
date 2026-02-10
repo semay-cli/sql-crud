@@ -1,0 +1,121 @@
+package repository
+
+import (
+    "context"
+    "os"
+    "testing"
+    "strconv"
+
+    "{{ .ProjectName }}/{{ .AppName }}/models"
+    "{{ .ProjectName }}/cache"
+    "{{ .ProjectName }}/configs"
+    "{{ .ProjectName }}/database"
+    "{{ .ProjectName }}/logs"
+)
+
+
+
+func setup{{ .ParentName }}To{{ .FieldName }}TestRepo(t *testing.T) (*{{ .AppName | toPascalCase }}Repository, func()) {
+    os.Setenv("{{ .AppName | replaceStringCapitalize }}_DB_TYPE", "sqlite")
+    os.Setenv("{{ .AppName | replaceStringCapitalize }}_SQLLITE_URI", ":memory:")
+
+    cfg, _ := configs.NewEnvConfig()
+    logger := logs.NewZapLogger()
+
+    bundle, err := database.ReturnSession("{{ .AppName | replaceString }}", cfg, logger)
+    if err != nil {
+        t.Fatalf("failed to connect to test db: %v", err)
+    }
+
+    // Initialize schema for both sides of the relationship
+    // For MtM, Gorm will handle the join table via the model tags
+    if err := bundle.Gorm.AutoMigrate(&models.{{ .ParentName }}{}, &models.{{ .FieldName }}{}); err != nil {
+        t.Fatalf("failed to migrate: %v", err)
+    }
+
+    cacheSvc, _ := cache.NewCacheService(cfg)
+    repo := InitRepository(bundle, cacheSvc, cfg)
+
+    cleanup := func() {
+        os.Unsetenv("{{ .AppName | replaceStringCapitalize }}_DB_TYPE")
+        os.Unsetenv("{{ .AppName | replaceStringCapitalize }}_SQLLITE_URI")
+    }
+
+    return repo, cleanup
+}
+
+func Test{{ .AppName | toPascalCase }}Repository_{{ .ParentName }}To{{ .FieldName }}_Relationship(t *testing.T) {
+    repo, cleanup := setup{{ .ParentName }}To{{ .FieldName }}TestRepo(t)
+    defer cleanup()
+
+    ctx := context.Background()
+
+    // 1. Setup Seed Data - Create Parent
+    parentPost := &models.{{ .ParentName }}Post{
+        {{- range .ParentFields }}
+        {{- if .Post }}
+        {{- $val := .RandomFieldValue }}
+        {{ .Name }}: {{ if eq .Type "string" }}sPtr({{ $val }}){{ else if eq .Type "bool" }}boolPtr({{ $val }}){{ else if eq .Type "time.Time" }}timePtr(parseTime({{ $val }})){{ else }}&([]{{.Type}}{ {{ $val }} }[0]){{ end }},
+        {{- end }}
+        {{- end }}
+    }
+    parentObj := &models.{{ .ParentName }}{}
+    if err := repo.Create{{ .ParentName }}(ctx, parentPost, nil, parentObj); err != nil {
+        t.Fatalf("failed to create parent {{ .ParentName }}: %v", err)
+    }
+
+    // 2. Setup Seed Data - Create Field (Child)
+    fieldPost := &models.{{ .FieldName }}Post{
+        {{- range .ResponseModel.Fields }}
+        {{- if .Post }}
+        {{- $val := .RandomFieldValue }}
+        {{ .Name }}: {{ if eq .Type "string" }}sPtr({{ $val }}){{ else if eq .Type "bool" }}boolPtr({{ $val }}){{ else if eq .Type "time.Time" }}timePtr(parseTime({{ $val }})){{ else }}&([]{{.Type}}{ {{ $val }} }[0]){{ end }},
+        {{- end }}
+        {{- end }}
+    }
+    fieldObj := &models.{{ .FieldName }}{}
+    if err := repo.Create{{ .FieldName }}(ctx, fieldPost, nil, fieldObj); err != nil {
+        t.Fatalf("failed to create field {{ .FieldName }}: %v", err)
+    }
+
+    pIDStr := strconv.Itoa(int(parentObj.ID))
+    fIDStr := strconv.Itoa(int(fieldObj.ID))
+
+    // 3. Test Add Relationship
+    t.Run("AddRelationship", func(t *testing.T) {
+        err := repo.Add{{ .ParentName }}To{{ .FieldName }}(ctx, pIDStr, fIDStr, nil)
+        if err != nil {
+            t.Fatalf("failed to add relationship: %v", err)
+        }
+    })
+
+    // 4. Test Get Relationship (Paginated)
+    t.Run("GetRelationships", func(t *testing.T) {
+        var results []models.{{ .FieldName }}Get
+        pagination := models.Pagination{Page: 1, Size: 10}
+        total, err := repo.Get{{ .ParentName }}{{ .FieldName }}s(ctx, pIDStr, pagination, &results)
+        if err != nil {
+            t.Fatalf("failed to get relationships: %v", err)
+        }
+        if total == 0 {
+            t.Errorf("expected at least 1 relationship, got %d", total)
+        }
+    })
+
+    // 5. Test Get Missing Relationships
+    t.Run("GetMissingRelationships", func(t *testing.T) {
+        var missingResults []models.{{ .FieldName }}Get
+        err := repo.GetAll{{ .FieldName }}s{{ .ParentName | toLowerCaseName }}DoesNotHave(ctx, pIDStr, &missingResults)
+        if err != nil {
+            t.Fatalf("failed to get missing relationships: %v", err)
+        }
+    })
+
+    // 6. Test Remove Relationship
+    t.Run("RemoveRelationship", func(t *testing.T) {
+        err := repo.Remove{{ .ParentName }}From{{ .FieldName }}(ctx, pIDStr, fIDStr, nil)
+        if err != nil {
+            t.Fatalf("failed to remove relationship: %v", err)
+        }
+    })
+}

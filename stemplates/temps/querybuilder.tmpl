@@ -43,6 +43,8 @@ type Builder struct {
 	joinClauses []string
 	batchValues [][]any
 	where       []string
+	groupBy     []string
+	having      []string
 	args        []any
 	order       string
 	limit       int
@@ -62,6 +64,8 @@ var builderPool = sync.Pool{
 			setClauses:  make([]string, 0, 24),
 			joinClauses: make([]string, 0, 16),
 			where:       make([]string, 0, 16),
+			groupBy:     make([]string, 0, 8),
+			having:      make([]string, 0, 8),
 			args:        make([]any, 0, 32),
 		}
 	},
@@ -86,6 +90,8 @@ func GetBuilder(isPostgres bool) *Builder {
 	b.joinClauses = b.joinClauses[:0]
 	b.batchValues = b.batchValues[:0]
 	b.where = b.where[:0]
+	b.groupBy = b.groupBy[:0]
+	b.having = b.having[:0]
 	b.args = b.args[:0]
 
 	return b
@@ -207,6 +213,49 @@ func (b *Builder) Where(query string, arg any) *Builder {
 
 	// Normal single placeholder
 	b.where = append(b.where, query)
+	b.args = append(b.args, arg)
+	return b
+}
+
+func (b *Builder) GroupBy(cols ...string) *Builder {
+	b.groupBy = append(b.groupBy, cols...)
+	return b
+}
+
+func (b *Builder) Having(query string, arg any) *Builder {
+	// Same rules as Where
+	if !strings.Contains(query, "?") {
+		b.having = append(b.having, query)
+		return b
+	}
+
+	// Auto-expand IN (?)
+	if slice, ok := arg.([]any); ok {
+		if len(slice) == 0 {
+			b.having = append(b.having, "1=0")
+			return b
+		}
+
+		buf := make([]byte, 0, len(query)+len(slice)*3)
+		for i := 0; i < len(query); i++ {
+			if query[i] == '?' {
+				for j := range slice {
+					if j > 0 {
+						buf = append(buf, ',', ' ')
+					}
+					buf = append(buf, '?')
+				}
+			} else {
+				buf = append(buf, query[i])
+			}
+		}
+
+		b.having = append(b.having, string(buf))
+		b.args = append(b.args, slice...)
+		return b
+	}
+
+	b.having = append(b.having, query)
 	b.args = append(b.args, arg)
 	return b
 }
@@ -341,6 +390,26 @@ func (b *Builder) ToSql() (string, []any, error) {
 				write(" AND ")
 			}
 			write(w)
+		}
+	}
+
+	if len(b.groupBy) > 0 {
+		write(" GROUP BY ")
+		for i, g := range b.groupBy {
+			if i > 0 {
+				write(", ")
+			}
+			write(g)
+		}
+	}
+
+	if len(b.having) > 0 {
+		write(" HAVING ")
+		for i, h := range b.having {
+			if i > 0 {
+				write(" AND ")
+			}
+			write(h)
 		}
 	}
 

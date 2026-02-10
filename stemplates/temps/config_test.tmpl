@@ -1,0 +1,31 @@
+package configs
+
+import (
+	"os"
+	"testing"
+)
+
+func TestEnvConfig(t *testing.T) {
+	// Set some env vars
+	os.Setenv("TEST_KEY", "test_val")
+	defer os.Unsetenv("TEST_KEY")
+
+	cfg, err := NewEnvConfig()
+	if err != nil {
+		t.Fatalf("failed to create config: %v", err)
+	}
+
+	// Test Get
+	if val := cfg.Get("TEST_KEY"); val != "test_val" {
+		t.Errorf("expected test_val, got %s", val)
+	}
+
+	// Test GetOrDefault
+	if val := cfg.GetOrDefault("NON_EXISTENT", "default"); val != "default" {
+		t.Errorf("expected default, got %s", val)
+	}
+
+	if val := cfg.GetOrDefault("TEST_KEY", "default"); val != "test_val" {
+		t.Errorf("expected test_val, got %s", val)
+	}
+}

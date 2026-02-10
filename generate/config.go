@@ -8,11 +8,13 @@ import (
 
 func GenerateConfig(data stemplates.Data) {
 	tmpl := stemplates.LoadTemplate("config")
+	tmplTest := stemplates.LoadTemplate("config_test")
 	err := os.MkdirAll("configs", os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
 	stemplates.WriteTemplateToFile("configs/configs.go", tmpl, data)
+	stemplates.WriteTemplateToFile("configs/configs_test.go", tmplTest, data)
 
 	tmplKeycloak := stemplates.LoadTemplate("utilsKeycloak")
 	tmplbase64 := stemplates.LoadTemplate("utilsBase64")

@@ -1,0 +1,84 @@
+package querybuilder
+
+import (
+	"testing"
+)
+
+func TestBuilder_Select(t *testing.T) {
+	b := GetBuilder(false)
+	defer b.Release()
+
+	sql, args, err := b.Select("id", "name").From("users").Where("id = ?", 1).ToSql()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedSql := "SELECT id, name FROM users WHERE id = ?"
+	if sql != expectedSql {
+		t.Errorf("expected %q, got %q", expectedSql, sql)
+	}
+	if len(args) != 1 || args[0] != 1 {
+		t.Errorf("expected args [1], got %v", args)
+	}
+}
+
+func TestBuilder_PostgresPlaceholders(t *testing.T) {
+	b := GetBuilder(true) // Postgres mode
+	defer b.Release()
+
+	sql, args, err := b.Insert("users").Columns("name", "email").Values("John", "john@example.com").ToSql()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedSql := "INSERT INTO users (name, email) VALUES ($1, $2)"
+	if sql != expectedSql {
+		t.Errorf("expected %q, got %q", expectedSql, sql)
+	}
+	if len(args) != 2 || args[0] != "John" || args[1] != "john@example.com" {
+		t.Errorf("wrong args: %v", args)
+	}
+}
+
+func TestBuilder_WhereIn(t *testing.T) {
+	b := GetBuilder(false)
+	defer b.Release()
+
+	ids := []any{1, 2, 3}
+	sql, args, err := b.Select().From("users").Where("id IN (?)", ids).ToSql()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedSql := "SELECT * FROM users WHERE id IN (?, ?, ?)"
+	if sql != expectedSql {
+		t.Errorf("expected %q, got %q", expectedSql, sql)
+	}
+	if len(args) != 3 {
+		t.Errorf("expected 3 args, got %d", len(args))
+	}
+}
+
+func TestBuilder_BatchInsert(t *testing.T) {
+	b := GetBuilder(true)
+	defer b.Release()
+
+	cols := []string{"name", "age"}
+	rows := [][]any{
+		{"Alice", 30},
+		{"Bob", 25},
+	}
+
+	sql, args, err := b.BatchInsert("users", cols, rows...).ToSql()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedSql := "INSERT INTO users (name, age) VALUES ($1, $2), ($3, $4)"
+	if sql != expectedSql {
+		t.Errorf("expected %q, got %q", expectedSql, sql)
+	}
+	if len(args) != 4 {
+		t.Errorf("expected 4 args, got %d", len(args))
+	}
+}

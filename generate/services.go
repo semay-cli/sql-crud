@@ -44,7 +44,9 @@ func GenerateServices(data stemplates.Data) {
 
 func GenerateServicesSQLC(data stemplates.Data) {
 	tmpl := stemplates.LoadTemplate("repository-sqlc")
+	tmplTest := stemplates.LoadTemplate("repository-sqlc-test")
 	rlnTmpl := stemplates.LoadTemplate("relationRepository-sqlc")
+	rlnTmplTest := stemplates.LoadTemplate("relationRepository-sqlc-test")
 	tmplSvc := stemplates.LoadTemplate("serviceApp-sqlc")
 	rlnTmplSvc := stemplates.LoadTemplate("relationAppService-sqlc")
 
@@ -58,9 +60,11 @@ func GenerateServicesSQLC(data stemplates.Data) {
 
 	for _, model := range data.Models {
 		filePath := fmt.Sprintf("repository/%s_crud_repo.go", strings.ToLower(model.Name))
+		filePathTest := fmt.Sprintf("repository/%s_crud_repo_test.go", strings.ToLower(model.Name))
 		filePathSvc := fmt.Sprintf("services/%s_crud_svc.go", strings.ToLower(model.Name))
 
 		stemplates.WriteTemplateToFileModel(filePath, tmpl, model)
+		stemplates.WriteTemplateToFileModel(filePathTest, tmplTest, model)
 		stemplates.WriteTemplateToFileModel(filePathSvc, tmplSvc, model)
 	}
 
@@ -74,11 +78,13 @@ func GenerateServicesSQLC(data stemplates.Data) {
 			}
 
 			filePath := fmt.Sprintf("repository/%s_%s_repo.go", strings.ToLower(relation.ParentName), strings.ToLower(relation.FieldName))
+			filePathTest := fmt.Sprintf("repository/%s_%s_repo_test.go", strings.ToLower(relation.ParentName), strings.ToLower(relation.FieldName))
 			filePathSvc := fmt.Sprintf("services/%s_%s_svc.go", strings.ToLower(relation.ParentName), strings.ToLower(relation.FieldName))
 			relation.AuthAppName = model.AuthAppName
 			relation.ResponseModel = response_model
 			// fmt.Println(response_model)
 			stemplates.WriteTemplateToFileRelation(filePath, rlnTmpl, relation)
+			stemplates.WriteTemplateToFileRelation(filePathTest, rlnTmplTest, relation)
 			stemplates.WriteTemplateToFileRelation(filePathSvc, rlnTmplSvc, relation)
 		}
 	}

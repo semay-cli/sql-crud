@@ -12,6 +12,7 @@ func GenerateCommon(data stemplates.Data) {
 	tmplSlice := stemplates.LoadTemplate("commonslice")
 	tmplJSONPool := stemplates.LoadTemplate("jsonFiber")
 	tmplQueryBuilder := stemplates.LoadTemplate("querybuilder")
+	tmplQueryBuilderTest := stemplates.LoadTemplate("querybuilder_test")
 	err := os.MkdirAll("common", os.ModePerm)
 	if err != nil {
 		panic(err)
@@ -27,4 +28,5 @@ func GenerateCommon(data stemplates.Data) {
 	stemplates.WriteTemplateToFile("common/common_slice.go", tmplSlice, data)
 	stemplates.WriteTemplateToFile("common/json.go", tmplJSONPool, data)
 	stemplates.WriteTemplateToFile("querybuilder/query_builder.go", tmplQueryBuilder, data)
+	stemplates.WriteTemplateToFile("querybuilder/query_builder_test.go", tmplQueryBuilderTest, data)
 }

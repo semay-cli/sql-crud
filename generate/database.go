@@ -8,11 +8,13 @@ import (
 
 func GenerateDBConn(data stemplates.ProjectSetting) {
 	tmpl := stemplates.LoadTemplate("database")
+	tmplTest := stemplates.LoadTemplate("database_test")
 	err := os.MkdirAll("database", os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
 	stemplates.WriteTemplateToFileSetting("database/database.go", tmpl, data)
+	stemplates.WriteTemplateToFileSetting("database/database_test.go", tmplTest, data)
 }
 
 func GenerateCacheService(data stemplates.ProjectSetting) {

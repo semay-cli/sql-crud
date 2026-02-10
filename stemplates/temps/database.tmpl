@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"net"
 	"strings"
 	"context"
 	"strconv"
@@ -77,6 +78,12 @@ func ReturnSession(app_name string, cfg *configs.EnvConfig, zapLogger *logs.Logg
 		if err != nil {
 			return nil, err
 		}
+		dialer := &net.Dialer{
+			KeepAlive: 5 * time.Minute, // Sends TCP keep-alive probes
+			Timeout:   5 * time.Second,
+		}
+		poolConfig.ConnConfig.DialFunc = dialer.DialContext
+		
 		// Pool size: env PG_POOL_MAX_CONNS / PG_POOL_MIN_CONNS (defaults 100/89 for throughput).
 		// With prefork, total conns = numProcesses × MaxConns; keep PgBouncer max_connections in mind.
 		poolConfig.MaxConns = 100

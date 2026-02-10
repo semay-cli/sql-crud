@@ -5,85 +5,47 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v3"
 )
 
 var (
+	// Increase initial capacity to 8KB to accommodate your 7.3KB payloads
+	// without triggering a mid-request reallocation.
 	bufferPool = sync.Pool{
 		New: func() any {
-			return bytes.NewBuffer(make([]byte, 0, 4096))
+			return bytes.NewBuffer(make([]byte, 0, 8192))
 		},
 	}
-	// Reusable Sonic Config
-	apiJson = sonic.ConfigDefault
 )
 
-// SendJSON is the high-performance engine for Fiber v3
 func SendJSON(c fiber.Ctx, status int, v any) error {
-	// Set status and headers first
-	c.Status(status)
-	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-
-	// 1. Get buffer from pool
-	buf := bufferPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	defer bufferPool.Put(buf)
-
-	// 2. Encode directly into the pooled buffer
-	// We use the package-level apiJson (Sonic) to avoid config allocation
-	if err := apiJson.NewEncoder(buf).Encode(v); err != nil {
-		return err
-	}
-
-	// 3. Performance Optimization: Sonic adds a newline (\n) at the end.
-	// We trim it to save 1 byte per request and keep the output clean.
-	data := buf.Bytes()
-	if len(data) > 0 && data[len(data)-1] == '\n' {
-		data = data[:len(data)-1]
-	}
-
-	// 4. In Fiber v3, c.Write is the correct way to send the byte slice.
-	_, err := c.Write(data)
-	return err
-}
-
-// =====================
-// Alternative: Standard JSON
-// =====================
-
-// SendJSONStd uses standard encoding/json (compatible, less memory)
-func SendJSONStd(c fiber.Ctx, status int, v any) error {
 	c.Status(status)
 	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 
 	buf := bufferPool.Get().(*bytes.Buffer)
 	buf.Reset()
-	defer bufferPool.Put(buf)
+	// No defer here for extreme perf; put it back manually after write
 
-	// Use standard JSON
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
 
 	if err := enc.Encode(v); err != nil {
+		bufferPool.Put(buf)
 		return err
 	}
 
-	// Remove trailing newline
 	data := buf.Bytes()
+	// Trim newline
 	if len(data) > 0 && data[len(data)-1] == '\n' {
 		data = data[:len(data)-1]
 	}
 
 	_, err := c.Write(data)
+	bufferPool.Put(buf) // Put back after write
 	return err
 }
 
-// =====================
-// Helper Functions
-// =====================
-
-// Success sends a successful JSON response
+// Success sends a successful JSON response using the optimized pool
 func Success(c fiber.Ctx, data any) error {
 	return SendJSON(c, fiber.StatusOK, fiber.Map{
 		"success": true,
