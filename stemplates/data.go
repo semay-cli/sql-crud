@@ -97,6 +97,7 @@ type Model struct {
 	Relations    []Relationship `json:"relations"`
 	AuthAppType  string         `json:"auth_app_type"`
 	TableName    string         `json:"table_name"`
+	SnowFlake    bool           `json:"snow_flake"`
 }
 
 // Relationship defines model relationships.
@@ -137,6 +138,7 @@ type Field struct {
 	Put              bool   `json:"put"`
 	OtM              bool   `json:"otm"`
 	MtM              bool   `json:"mtm"`
+	MtO              bool   `json:"mto"`
 	ProjectName      string `json:"project_name"`
 	AppName          string `json:"app_name"`
 	AuthAppName      string `json:"auth_app_name"`

@@ -3,8 +3,17 @@ package manager
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"runtime"
 	"strconv"
+	"sync"
+	"syscall"
 	"time"
+	"golang.org/x/sys/unix"
+	"slices"
 
 
 	{{- range .AppNames}}
@@ -31,7 +40,6 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/dig"
 	"golang.org/x/time/rate"
-	"gorm.io/gorm"
 )
 
 var (
@@ -43,13 +51,7 @@ var (
 		Short: "Run Development server",
 		Long:  "Run development server",
 		Run: func(cmd *cobra.Command, args []string) {
-			isWorker := false
-			for _, arg := range args {
-				if arg == "worker" {
-					isWorker = true
-					break
-				}
-			}
+			isWorker := slices.Contains(args, "worker")
 
 			container := buildContainer()
 			err := container.Invoke(func(deps struct {
@@ -67,6 +69,8 @@ var (
 				{{- range .AppNames}}
 				{{ . | replaceString }}.SetupRoutes(deps.App, deps.{{ . | toPascalCase }}Ctrl)
 				{{- end}}
+                enablePrefork := deps.Cfg.GetOrDefault("PREFORK", "false") == "true"
+
 
 				if isWorker {
 					deps.Logger.Info(fmt.Sprintf("Worker PID %d starting Echo...", os.Getpid()))
@@ -76,7 +80,7 @@ var (
 				} else {
 					// MASTER: Start the scheduler and spawn workers
 					deps.Scheduler.Start()
-					startMaster(deps.Logger)
+					startMaster(deps.Logger,enablePrefork)
 				}
 
 				defer deps.Logger.Sync()
@@ -158,7 +162,7 @@ func NewEchoApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrace
 	return app
 }
 
-func startMaster(logger *logs.Logger) {
+func startMaster(logger *logs.Logger,prefork bool) {
 	numCPU := runtime.NumCPU()
 	logger.Info(fmt.Sprintf("Master PID %d managing %d workers", os.Getpid(), numCPU))
 
@@ -202,7 +206,10 @@ func startMaster(logger *logs.Logger) {
 	}
 
 	// Initial Start
-	for i := 0; i < numCPU; i++ {
+   	for range numCPU {
+		if !prefork {
+			break
+		}
 		spawn()
 	}
 
@@ -324,7 +331,7 @@ func buildContainer() *dig.Container {
 
 	{{ range .AppNames}}
 	// Provide named DBs
-	mustProvide(container.Provide(func(cfg *configs.EnvConfig,logger *logs.Logger) (*gorm.DB, error) {
+	mustProvide(container.Provide(func(cfg *configs.EnvConfig,logger *logs.Logger) (*database.DBBundle, error) {
 		return database.ReturnSession("{{ . | replaceString }}", cfg, logger)
 	}, dig.Name("{{ . | replaceString }}_db")))
 	{{- end }}
@@ -335,7 +342,7 @@ func buildContainer() *dig.Container {
 	// Provide {{ . | replaceString }} repository
 	mustProvide(container.Provide(func(in struct {
 		dig.In
-		DB    *gorm.DB `name:"{{ . | replaceString }}_db"`
+		DB    *database.DBBundle `name:"{{ . | replaceString }}_db"`
 		Cache *cache.CacheService
 		Cfg   *configs.EnvConfig
 	}) *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository  {
@@ -350,7 +357,7 @@ func buildContainer() *dig.Container {
     	// Provide {{ . | replaceString }} service
     	mustProvide(container.Provide(func(in struct {
     		dig.In
-    		DB    *gorm.DB `name:"{{ . | replaceString }}_db"`
+    		DB    *database.DBBundle `name:"{{ . | replaceString }}_db"`
     		Cache *cache.CacheService
     		Cfg   *configs.EnvConfig
     		Repo  *{{ . | replaceString }}_repo.{{ . | toPascalCase }}Repository        `name:"{{ . | replaceString }}_repo"`
@@ -392,7 +399,6 @@ func buildContainer() *dig.Container {
 	mustProvide(container.Provide(func(cfg *configs.EnvConfig,  appTracer oteltrace.Tracer, prom *prometheus.Registry, logger *logs.Logger) *echo.Echo {
 		return NewEchoApp(cfg,logger ,appTracer, prom)
 	}))
-
 	return container
 }
 

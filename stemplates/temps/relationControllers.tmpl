@@ -9,7 +9,7 @@ import (
 
 	"net/http"
 	"strconv"
-	 "github.com/gofiber/fiber/v3"
+	"github.com/labstack/echo/v4"
 	"{{.ProjectName}}/common"
 	"{{.ProjectName}}/{{.AppName}}/models"
 	//"{{.ProjectName}}/observe"
@@ -27,9 +27,9 @@ import (
 // @Produce json
 // @Param {{.LowerFieldName}}_id path string true "{{.FieldName}} ID"
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerFieldName}}_id{{ "}" }}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [post]
-func (ctrl *{{ .AppName | toPascalCase }}Controller)  Add{{.FieldName}}To{{.ParentName}}(contx fiber.Ctx) error {
+func (ctrl *{{ .AppName | toPascalCase }}Controller)  Add{{.FieldName}}To{{.ParentName}}(contx echo.Context) error {
 
 
 	// validate path params
@@ -51,7 +51,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller)  Add{{.FieldName}}To{{.Pare
 		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
-		
+
 	resp.Message = "Success Added {{.FieldName}} to  {{.ParentName}}."
 	resp.Success = true
 	resp.Data = nil
@@ -68,19 +68,19 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller)  Add{{.FieldName}}To{{.Pare
 // @Produce json
 // @Param {{.LowerFieldName}}_id path string true "{{.FieldName}} ID"
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Success 200 {object} common.ResponseHTTP{data=models.{{.ParentName}}Post}
-// @Failure 400 {object} common.ResponseHTTP{}
-// @Failure 500 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponseHTTP[[]models.{{.FieldName}}Post]{data=models.{{.ParentName}}Post}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
+// @Failure 500 {object} common.ResponseHTTP[any]{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerFieldName}}_id{{ "}" }}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [delete]
-func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.FieldName}}From{{.ParentName}}(contx fiber.Ctx) error {
-	
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.FieldName}}From{{.ParentName}}(contx echo.Context) error {
+
 
 	// validate path params
 	{{.LowerFieldName}}_id := contx.Param("{{.LowerFieldName}}_id")
 
 	// validate path params
 	{{.LowerParentName}}_id := contx.Param("{{.LowerParentName}}_id")
-	
+
 	// initalize resp
 	resp := common.GetResponseHTTP()
 	defer common.PutResponseHTTP(resp)
@@ -112,11 +112,11 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.FieldName}}From{{.
 // @Produce json
 // @Param page query int true "page"
 // @Param size query int true "page size"
-// @Success 200 {object} common.ResponsePagination{data=[]models.{{.FieldName}}Get}
+// @Success 200 {object} common.ResponsePagination[[]models.{{.FieldName}}Get]{data=[]models.{{.FieldName}}Get}
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerParentName}}{{.LowerFieldName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
-func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.ParentName}}s(contx fiber.Ctx) error {
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.ParentName}}s(contx echo.Context) error {
 
 
 	// initalize resp
@@ -185,16 +185,16 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}sOf{{.Pare
 // @Security ApiKeyAuth
 // @Accept json
 // @Produce json
-// @Success 200 {object} common.ResponseHTTP{data=[]models.{{.FieldName}}Get}
+// @Success 200 {object} common.ResponseHTTP[[]models.{{.FieldName}}Get]{data=[]models.{{.FieldName}}Get}
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerFieldName}}noncomplement{{.LowerParentName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
-func (ctrl *{{ .AppName | toPascalCase }}Controller) GetAll{{.FieldName}}sOf{{.ParentName}}s(contx fiber.Ctx) error {
+func (ctrl *{{ .AppName | toPascalCase }}Controller) GetAll{{.FieldName}}sOf{{.ParentName}}s(contx echo.Context) error {
 
 
 	// validate path params
 	{{.LowerParentName}}_id := contx.Param("{{.LowerParentName}}_id")
-	
+
 	// initalize resp
 	resp := common.GetResponseHTTP()
 	defer common.PutResponseHTTP(resp)
@@ -226,11 +226,11 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) GetAll{{.FieldName}}sOf{{.P
 // @Security ApiKeyAuth
 // @Accept json
 // @Produce json
-// @Success 200 {object} common.ResponseHTTP{data=[]models.{{.FieldName}}Get}
+// @Success 200 {object} common.ResponseHTTP[[]models.{{.FieldName}}Get]{data=[]models.{{.FieldName}}Get}
 // @Param {{.LowerParentName}}_id path string true "{{.ParentName}} ID"
-// @Failure 400 {object} common.ResponseHTTP{}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
 // @Router /{{$.AppName | replaceString}}/{{.LowerFieldName}}complement{{.LowerParentName}}/{{ "{" }}{{.LowerParentName}}_id{{ "}" }} [get]
-func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}Complement{{.ParentName}}s(contx fiber.Ctx) error {
+func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.FieldName}}Complement{{.ParentName}}s(contx echo.Context) error {
 
 
 	// validate path params

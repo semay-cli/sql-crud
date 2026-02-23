@@ -68,7 +68,7 @@ func (s *{{ .AppName | toPascalCase }}Service) Update{{.Name}}(ctx context.Conte
         return &models.{{.Name}}Get{},fmt.Errorf("invalid ID: %v", err)
     }
 
-	err = s.withTransaction(ctx, func(tx *gorm.DB) error {
+	err = s.WithTransaction(ctx, func(tx *gorm.DB) error {
          err := tx.Model(&models.{{.Name}}{}).Where("id = ?", id).First(&existing).Error
          if err != nil {
              return err

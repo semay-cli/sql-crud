@@ -42,6 +42,7 @@ func runModelsCommand(cmd *cobra.Command, args []string) {
 	// Generate models and migrations
 	if ormStatus {
 		generate.GenerateModelsSQLc(stemplates.RenderData)
+
 	} else {
 		generate.GenerateModels(stemplates.RenderData)
 	}

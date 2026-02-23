@@ -37,20 +37,35 @@ func (m *{{.Name}}) TableName() string {
 func (m *{{.Name}}) ToGet() *{{.Name}}Get {
     return &{{.Name}}Get{
         {{- range .Fields}}
-        {{if .Get}}{{.Name}}: m.{{.Name}},{{- end}}
-        {{- end}}
+        {{- if .Get}}
+        {{- if .ForeignKeyModel }}
+        {{.Name}}: func(v *{{.Type}}) uint { if v == nil { return 0 }; return uint(*v) }(m.{{.Name}}),
+        {{- else }}
+        {{.Name}}: m.{{.Name}},
+        {{- end }}
+        {{- end }}
+        {{- end }}
         CreatedAt: m.CreatedAt,
         UpdatedAt: m.UpdatedAt,
     }
 }
 
 func (m *{{.Name}}) CopyTo(target *{{.Name}}Get) {
-    
-        {{- range .Fields}}
-        {{if .Get}}target.{{.Name}}=m.{{.Name}}{{- end}}
-        {{- end}}
-        target.CreatedAt=m.CreatedAt
-        target.UpdatedAt=m.UpdatedAt
+    {{- range .Fields}}
+    {{- if .Get}}
+    {{- if .ForeignKeyModel }}
+    if m.{{.Name}} != nil {
+        target.{{.Name}} = uint(*m.{{.Name}})
+    } else {
+        target.{{.Name}} = 0
+    }
+    {{- else }}
+    target.{{.Name}} = m.{{.Name}}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    target.CreatedAt = m.CreatedAt
+    target.UpdatedAt = m.UpdatedAt
 }
 
 {{- $hasUUID := false }}
@@ -71,9 +86,32 @@ func (m *{{.Name}}) CopyTo(target *{{.Name}}Get) {
 // {{.Name}}Post model info
 // @Description {{.Name}}Post type information
 type {{.Name}}Post struct {
-  	{{- range .Fields}}{{- if .Post}} {{if .ForeignKeyModel }} {{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
-     {{ .ForeignKeyModel }} {{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}{{- else if eq .Type "time.Time" }}  {{.Name}} *time.Time {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- else }}   {{.Name}} {{ if eq .Type "bool"}}{{- end}}*{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}} {{- end}}{{- end}}
-{{end}}}
+    {{- range .Fields}}
+    {{- if .Post}}
+        {{- if .ForeignKeyModel }}
+            {{- /* Add * only if type does NOT already start with * */}}
+            {{- if hasPrefix .Type "*" }}
+{{.Name}} {{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
+            {{- else }}
+{{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
+            {{- end }}
+            {{ .ForeignKeyModel }} {{ .ForeignKeyModel }} {{.BackTick}}gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"{{.BackTick}}
+        {{- else if eq .Type "time.Time" }}
+{{.Name}} *time.Time {{.BackTick}}{{.Annotation}}{{.BackTick}}
+        {{- else if eq .Type "bool" }}
+{{.Name}} *bool {{.BackTick}}{{.Annotation}}{{.BackTick}}
+        {{- else }}
+            {{- /* Add * only if type does NOT already start with * */}}
+            {{- if hasPrefix .Type "*" }}
+{{.Name}} {{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
+            {{- else }}
+{{.Name}} *{{.Type}} {{.BackTick}}{{.Annotation}}{{.BackTick}}
+            {{- end }}
+        {{- end }}
+    {{- end }}
+    {{- end}}
+}
+
 
 // {{.Name}}Get model info
 // @Description {{.Name}}Get type information

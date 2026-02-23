@@ -8,11 +8,10 @@ import (
     "time"
 
     "github.com/bwmarrin/snowflake"
-    "github.com/golang-jwt/jwt/v5"
     "github.com/oklog/ulid/v2"
 	{{- if eq .AuthAppName .CurrentAppName }}
 		"{{.ProjectName}}/{{.CurrentAppName}}/models"
-	//"github.com/golang-jwt/jwt/v5"
+		"github.com/golang-jwt/jwt/v5"
 	{{- end }}
 
 )
@@ -185,6 +184,13 @@ func boolPtr(b bool) *bool  { return &b }
 func timePtr(b time.Time) *time.Time {
 	return &b
 }
+
+func uintPtr(u uint) *uint { return &u }
+func uint64Ptr(u uint64) *uint64 { return &u }
+func int64Ptr(u int64) *int64 { return &u }
+func intPtr(u int) *int { return &u }
+
+func float64Ptr(f float64) *float64 { return &f }
 
 func parseTime(s string) time.Time {
     t, err := time.Parse(time.RFC3339, s)

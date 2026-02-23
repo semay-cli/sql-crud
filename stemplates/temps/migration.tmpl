@@ -34,7 +34,7 @@ func StrPtr(t time.Time) *string {
 
 func InitDatabase(test_flag bool, cfg *configs.EnvConfig,logger *logs.Logger) {
 
-	dbbundle, err := database.ReturnSession("{{.AuthAppName | replaceString }}",cfg,logger)
+	dbbundle, err := database.ReturnSession("{{.AppName | replaceString }}",cfg,logger)
 	db:= dbbundle.Gorm
 	if err != nil {
 		panic(err)

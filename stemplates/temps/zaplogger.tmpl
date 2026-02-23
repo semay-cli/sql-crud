@@ -130,9 +130,6 @@ func (l *Logger) GetZapLogger() *zap.Logger {
 	return l.logger
 }
 
-func (l *Logger) GetZapLogger() *zap.Logger {
-	return l.logger
-}
 
 func (z *Logger) TraceQueryStart(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
 	z.logger.Debug("Executing query",
@@ -315,4 +312,3 @@ func (l *Logger) PanicjInternal(j log.JSON) {
 	l.logger.Panic("panic", fields...)
 	zapFieldPool.Put(fields)
 }
-

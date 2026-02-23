@@ -36,8 +36,8 @@ func (s *{{ .AppName | toPascalCase }}Repository) Add{{.ParentName}}To{{.FieldNa
         Values({{.ParentName | toInitials }}ID, {{.FieldName | toInitials }}ID)
     {{- end}}
 
-    {{- if .OtM }}
-    qb.Update("{{.LowerFieldName}}s").
+    {{- if or .OtM .MtO }}
+    qb.Update("{{.FieldName | toSnakeCase}}s").
         Set("{{.LowerParentName}}_id", {{.ParentName | toInitials}}ID).
         Where("id = ?", {{.FieldName | toInitials}}ID)
     {{- end}}
@@ -86,8 +86,8 @@ func (s *{{ .AppName | toPascalCase }}Repository) Remove{{ .ParentName}}From{{.F
         Where("{{.LowerFieldName }}_id = ?", {{.FieldName | toInitials}}ID)
     {{- end}}
 
-    {{- if .OtM }}
-    qb.Update("{{.LowerFieldName}}s").
+    {{- if or .OtM .MtO }}
+    qb.Update("{{.FieldName | toSnakeCase }}s").
         Set("{{.LowerParentName}}_id", nil).
         Where("id = ?", {{.FieldName | toInitials}}ID)
     {{- end}}
@@ -129,9 +129,9 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.ParentName}}{{.FieldName
         JoinArgs("LEFT JOIN {{.TableName }} {{ .TableName | toInitials}} ON {{.FieldName | toInitials}}.id = {{ .TableName | toInitials}}.{{.LowerFieldName}}_id").
         Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID)
     {{- end }}
-    {{- if .OtM}}
+    {{- if or .OtM .MtO}}
     qb.Select("{{.FieldName | toInitials}}.*", "count(*) OVER() as total_count").
-        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
+        From("{{.FieldName | toSnakeCase}}s {{.FieldName | toInitials }}").
         Where("{{.FieldName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID)
     {{- end}}
 
@@ -207,9 +207,9 @@ func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}sFor{{.Par
         Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
     {{- end }}
-    {{- if .OtM}}
+    {{- if or .OtM .MtO}}
     qb.Select("{{.FieldName | toInitials}}.*").
-        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
+        From("{{.FieldName | toSnakeCase}}s {{.FieldName | toInitials }}").
         Where("{{.FieldName | toInitials}}.{{.LowerParentName}}_id = ? ", {{.ParentName | toInitials}}ID).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
     {{- end}}
@@ -279,9 +279,9 @@ func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}s{{.Parent
         Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id IS NULL", nil).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
     {{- end }}
-    {{- if .OtM}}
+    {{- if or .OtM .MtO}}
     qb.Select("{{.FieldName | toInitials}}.*").
-        From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
+        From("{{.FieldName | toSnakeCase }}s {{.FieldName | toInitials }}").
         Where("({{.FieldName | toInitials}}.{{.LowerParentName}}_id IS NULL OR {{.FieldName | toInitials}}.{{.LowerParentName}}_id <> ?)", {{.ParentName | toInitials}}ID).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
     {{- end}}

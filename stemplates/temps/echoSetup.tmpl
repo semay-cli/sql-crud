@@ -26,15 +26,6 @@ import (
 
 //  Please Note the sequence you mount the middlewares
 func SetupRoutes(app *echo.Echo,  ctrls *controllers.{{ .AppName | toPascalCase }}Controller) {
-	    //logOutput, _ := logs.Logfile("shipping_portal")
-    	//
-    	//app.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-    	//	Format: `{"time":"${time_rfc3339_nano}","id":"${id}","remote_ip":"${remote_ip}",` +
-    	//		`"host":"${host}","method":"${method}","uri":"${uri}","user_agent":"${user_agent}",` +
-    	//		`"status":${status},"error":"${error}","latency":${latency},"latency_human":"${latency_human}"` +
-    	//		`,"bytes_in":${bytes_in},"bytes_out":${bytes_out}}` + "\n",
-    	//	Output: logOutput,
-    	//}))
 
 	// then authentication middlware
 	gapp := app.Group("/api/v1/{{.AppName | replaceString}}")

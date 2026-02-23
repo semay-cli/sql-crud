@@ -33,11 +33,20 @@ func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Co
     {{- end }}
     {{- end }}
 
+    {{- /* 1. SNOWFLAKE ID GENERATION */ -}}
+    {{- if .SnowFlake }}
+    newID := s.SnowFlake.GenerateShort()
+    if newID <= 0 {
+        return fmt.Errorf("invalid Snowflake ID generated: %d", newID)
+    }
+    {{- end }}
+
     isPG := s.DB.Dialector.Name() == "postgres"
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
     
-    qb.Insert("{{.LowerName}}s").Columns(
+    qb.Insert("{{.Name | toSnakeCase }}s").Columns(
+        {{- if .SnowFlake }}"id",{{- end }} {{- /* Add ID column if Snowflake */ -}}
         {{- $i := 0 -}}
         {{- range .Fields -}}
             {{- if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") -}}
@@ -46,6 +55,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Co
             {{- end -}}
         {{- end -}}
     ).Values(
+        {{- if .SnowFlake }}newID,{{- end }} {{- /* Add ID value if Snowflake */ -}}
         {{- range .Fields}} {{- if .Post}}
             {{- if eq .Name "Password" }} hashedPassword,
             {{- else if eq .Name "UUID" }} {{$.LowerName}}_uuid.String(),
@@ -85,7 +95,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) GetOne{{.Name}}(ctx context.Co
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
     
-    qb.Select("*").From("{{.LowerName}}s").Where("id = ?", id)
+    qb.Select("*").From("{{.Name | toSnakeCase }}s").Where("id = ?", id)
     query, args, _ := qb.ToSql()
 
     var err error
@@ -122,7 +132,7 @@ func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}By{{ $field | ge
     defer qb.Release()
 
     qb.Select("{{$.Name | toInitials}}.*").
-        From("{{$.LowerName}}s {{$.Name | toInitials}}").
+        From("{{$.Name | toSnakeCase }}s {{$.Name | toInitials}}").
         Where("{{$.Name | toInitials}}.{{ $field | getBase }}= ?", {{ $field | toSnakeCase }})
 
     query, args, err := qb.ToSql()
@@ -176,7 +186,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Cont
             {{- if gt $i 0}}, {{end}}"{{$.Name | toInitials}}.{{.Name | toSnakeCase}}"
             {{- $i = add $i 1 -}}
         {{- end -}}
-    {{- end -}}, "count(*) OVER() as total_count").From("{{.LowerName}}s {{.Name | toInitials}}")
+    {{- end -}}, "count(*) OVER() as total_count").From("{{.Name | toSnakeCase}}s {{.Name | toInitials}}")
     {{ if gt (len .SearchFields) 0 }}
     likeExpr := " ILIKE CONCAT('%', ?::text, '%')"
     if !isPG { likeExpr = " LIKE '%' || ? || '%'" }
@@ -251,7 +261,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Co
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
     
-    qb.Update("{{ .LowerName}}s")
+    qb.Update("{{ .Name | toSnakeCase }}s")
     {{- range .Fields}} {{- if .Patch}}
     if patch_{{$.LowerName}}.{{.Name}} != nil {
         {{- if eq .Name "Password" }}
@@ -282,7 +292,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Delete{{.Name}}(ctx context.Co
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
         
-    qb.Delete("{{.LowerName}}s").Where("id", id)
+    qb.Delete("{{.Name | toSnakeCase }}s").Where("id", id)
     query, args, _ := qb.ToSql()
 
     var err error
@@ -304,7 +314,8 @@ func (s *{{ .AppName | toPascalCase }}Repository) Delete{{.Name}}(ctx context.Co
 }
 
 // Pre-defined at package level to avoid heap allocation per call.
-var {{.LowerName}}InsertColumns = []string{
+var {{.LowerName }}InsertColumns = []string{
+    {{- if .SnowFlake }}"id",{{- end }}
     {{- $i := 0 -}}
     {{- range .Fields -}}
         {{- if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") -}}
@@ -316,20 +327,14 @@ var {{.LowerName}}InsertColumns = []string{
 
 func (s *{{ .AppName | toPascalCase }}Repository) BatchCreate{{.Name}}s(ctx context.Context, posted_{{.LowerName}}s []models.{{.Name}}Post, tx any) error {
     count := len(posted_{{.LowerName}}s)
-    if count == 0 {
-        return nil
-    }
+    if count == 0 { return nil }
+    if count > 1000 { return fmt.Errorf("batch size exceeds maximum limit of 1000") }
 
-    if count > 1000 {
-        return fmt.Errorf("batch size exceeds maximum limit of 1000")
-    }
-
-    // --- PATH A: NATIVE POSTGRES (CopyFrom Protocol) ---
-    // This is the fastest way to insert multiple rows in Postgres
+    // --- PATH A: NATIVE POSTGRES (CopyFrom) ---
     if s.NativePool != nil && tx == nil {
         _, err := s.NativePool.CopyFrom(
             ctx,
-            pgx.Identifier{"{{.LowerName}}s"},
+            pgx.Identifier{"{{.Name | toSnakeCase}}s"},
             {{.LowerName}}InsertColumns,
             pgx.CopyFromSlice(count, func(i int) ([]any, error) {
                 p := &posted_{{.LowerName}}s[i]
@@ -337,6 +342,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) BatchCreate{{.Name}}s(ctx cont
                 {{- range .Fields }}{{ if eq .Name "Password" }}hashedPassword, _ := models.HashPassword(*p.Password);{{ end }}{{ end }}
                 
                 return []any{
+                    {{- if .SnowFlake }} s.SnowFlake.GenerateShort(),{{- end }}
                     {{- range .Fields }}
                         {{- if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") }}
                             {{ if eq .Name "Password" }} hashedPassword,
@@ -352,8 +358,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) BatchCreate{{.Name}}s(ctx cont
         return err
     }
 
-    // --- PATH B: FALLBACK (Standard Batch Insert) ---
-    // Used if we are in a transaction or not using Postgres
+    // --- PATH B: FALLBACK ---
     flatPtr := common.FlatArgPool.Get().(*[]any)
     flat := (*flatPtr)[:0]
     defer func() {
@@ -367,15 +372,16 @@ func (s *{{ .AppName | toPascalCase }}Repository) BatchCreate{{.Name}}s(ctx cont
 
     rows := make([][]any, count)
     {{ $colCount := 0 -}}
+    {{- if .SnowFlake }}{{ $colCount = 1 }}{{ end -}}
     {{- range .Fields -}}{{ if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") }}{{ $colCount = add $colCount 1 }}{{ end }}{{ end -}}
-    const colCount = {{ $colCount }}
-
+    
     for i := 0; i < count; i++ {
         p := &posted_{{.LowerName}}s[i]
         startIdx := len(flat)
         {{ if $break_3 }}u, _ := uuid.NewV7(); uStr := u.String();{{- end }}
         {{- range .Fields }}{{ if eq .Name "Password" }}hashedPassword, _ := models.HashPassword(*p.Password);{{ end }}{{ end }}
-
+        
+        {{- if .SnowFlake }} flat = append(flat, s.SnowFlake.GenerateShort()){{- end }}
         {{- range .Fields }}
             {{- if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") }}
                 {{ if eq .Name "Password" }} flat = append(flat, hashedPassword)
@@ -385,10 +391,10 @@ func (s *{{ .AppName | toPascalCase }}Repository) BatchCreate{{.Name}}s(ctx cont
                 {{- end }}
             {{- end }}
         {{- end }}
-        rows[i] = flat[startIdx : startIdx+colCount]
+        rows[i] = flat[startIdx : startIdx+{{ $colCount }}]
     }
 
-    qb.BatchInsert("{{.LowerName}}s", {{.LowerName}}InsertColumns, rows...).
+    qb.BatchInsert("{{.Name | toSnakeCase }}s", {{.LowerName}}InsertColumns, rows...).
         SetExpr("created_at", "CURRENT_TIMESTAMP")
 
     query, args, err := qb.ToSql()
@@ -403,4 +409,4 @@ func (s *{{ .AppName | toPascalCase }}Repository) BatchCreate{{.Name}}s(ctx cont
         _, err = s.SQLC.ExecContext(ctx, query, args...)
     }
     return err
-}   
+}

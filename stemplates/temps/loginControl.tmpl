@@ -36,9 +36,9 @@ type TokenResponse struct {
 // @Accept json
 // @Produce json
 // @Param user body LoginPost true "Login"
-// @Success 202 {object} common.ResponseHTTP{data=TokenResponse{}}
-// @Failure 404 {object} common.ResponseHTTP{}
-// @Failure 503 {object} common.ResponseHTTP{}
+// @Success 202 {object} common.ResponseHTTP[any]{data=TokenResponse{}}
+// @Failure 404 {object} common.ResponseHTTP[any]{}
+// @Failure 503 {object} common.ResponseHTTP[any]{}
 // @Router /{{.CurrentAppName | replaceString}}/login [post]
 func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Context) error {
 
@@ -48,7 +48,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Con
 	//first parse request data
 	if err := contx.Bind(&login_request); err != nil {
 
-		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
+		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP[any]{
 			Success: false,
 			Message: err.Error(),
 			Data:    nil,
@@ -56,8 +56,10 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Con
 	}
 
 	// then validate structure
-	if err := ctrl.Validator.Struct(login_request); err != nil {
-		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
+	validator := getValidator()
+	defer putValidator(validator)
+	if err := validator.Struct(login_request); err != nil {
+		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP[any]{
 			Success: false,
 			Message: err.Error(),
 			Data:    nil,
@@ -68,7 +70,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Con
 	case "authorization_code":
 		token, err := repo.Login(login_request.Email, login_request.Password,contx.Request().Context())
 		if err != nil {
-			return contx.JSON(http.StatusUnauthorized, common.ResponseHTTP{
+			return contx.JSON(http.StatusUnauthorized, common.ResponseHTTP[any]{
 				Success: false,
 				Message: err.Error(),
 				Data:    nil,
@@ -84,7 +86,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Con
 		}
 		// Optionally update last login
 		//repo.DB.WithContext(contx.Request().Context()).Model(&models.User{}).Where("id = ?", claims.UserID).Update("last_login", time.Now())
-		return contx.JSON(http.StatusAccepted, common.ResponseHTTP{
+		return contx.JSON(http.StatusAccepted, common.ResponseHTTP[any]{
 			Success: true,
 			Message: "Authorization Granted",
 			Data:    data,
@@ -92,7 +94,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Con
 	case "refresh_token":
 		newToken, err := repo.RefreshToken(login_request.Token)
 		if err != nil {
-			return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
+			return contx.JSON(http.StatusBadRequest, common.ResponseHTTP[any]{
 				Success: false,
 				Message: err.Error(),
 				Data:    nil,
@@ -105,7 +107,7 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Con
 			RefreshToken: refreshString,
 			TokenType:    "Bearer",
 		}
-		return contx.JSON(http.StatusAccepted, common.ResponseHTTP{
+		return contx.JSON(http.StatusAccepted, common.ResponseHTTP[any]{
 			Success: true,
 			Message: "Token refreshed",
 			Data:    data,
@@ -113,19 +115,19 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Con
 	case "token_decode":
 		claims, err := repo.DecodeToken(login_request.Token)
 		if err != nil {
-			return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
+			return contx.JSON(http.StatusBadRequest, common.ResponseHTTP[any]{
 				Success: false,
 				Message: err.Error(),
 				Data:    nil,
 			})
 		}
-		return contx.JSON(http.StatusAccepted, common.ResponseHTTP{
+		return contx.JSON(http.StatusAccepted, common.ResponseHTTP[any]{
 			Success: true,
 			Message: "Token decode successful",
 			Data:    claims,
 		})
 	default:
-		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP{
+		return contx.JSON(http.StatusBadRequest, common.ResponseHTTP[any]{
 			Success: false,
 			Message: "Unknown grant type",
 			Data:    nil,
@@ -141,14 +143,14 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) Login(contx echo.Con
 // @Tags Authentication
 // @Security ApiKeyAuth
 // @Produce json
-// @Success 200 {object} common.ResponseHTTP{data=map[string]interface{}}
-// @Failure 401 {object} common.ResponseHTTP
-// @Failure 500 {object} common.ResponseHTTP
+// @Success 200 {object} common.ResponseHTTP[any]{data=map[string]any}
+// @Failure 401 {object} common.ResponseHTTP[any]{}
+// @Failure 500 {object} common.ResponseHTTP[any]{}
 // @Router /{{.CurrentAppName | replaceString}}/user/details [get]
 func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) GetUserDetails(contx echo.Context) error {
 	authHeader := contx.Request().Header.Get("X-APP-TOKEN")
 	if authHeader == "" {
-		return contx.JSON(http.StatusUnauthorized, common.ResponseHTTP{
+		return contx.JSON(http.StatusUnauthorized, common.ResponseHTTP[any]{
 			Success: false,
 			Message: "missing authorization header",
 		})
@@ -159,13 +161,13 @@ func (ctrl *{{ .CurrentAppName | toPascalCase }}Controller) GetUserDetails(contx
 
 	userDetails, err := ctrl.Svc.GetUserDetails(tokenString)
 	if err != nil {
-		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP{
+		return contx.JSON(http.StatusInternalServerError, common.ResponseHTTP[any]{
 			Success: false,
 			Message: err.Error(),
 		})
 	}
 
-	return contx.JSON(http.StatusOK, common.ResponseHTTP{
+	return contx.JSON(http.StatusOK, common.ResponseHTTP[any]{
 		Success: true,
 		Message: "User details fetched successfully",
 		Data:    userDetails,

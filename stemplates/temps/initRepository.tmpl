@@ -7,6 +7,7 @@ import (
 	"{{ .ProjectName }}/cache"
 	"{{ .ProjectName }}/configs"
 	"{{ .ProjectName }}/database"
+	"{{ .ProjectName }}/utils"
 	db "{{ .ProjectName }}/{{ .AppName}}/sqlc"	
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,6 +25,7 @@ type {{ .AppName | toPascalCase }}Repository struct {
 	Cache *cache.CacheService
 	Queries      *db.Queries 
 	NativePool   *pgxpool.Pool
+	SnowFlake *utils.Generator
 	Cfg   *configs.EnvConfig
 	ForeignRegex *regexp.Regexp
     NumberRegex  *regexp.Regexp
@@ -32,6 +34,10 @@ type {{ .AppName | toPascalCase }}Repository struct {
 
 
 func InitRepository(client *database.DBBundle , cacheService *cache.CacheService, cfg *configs.EnvConfig) *{{ .AppName | toPascalCase }}Repository {
+	snowflakeNode, err := utils.NewGenerator() // Node ID can be any number between 0 and 1023
+	if err != nil {
+		panic("Failed to initialize Snowflake node: " + err.Error())
+	}
 	
 	return &{{ .AppName | toPascalCase }}Repository{
 		SQLC:         client.SQL,
@@ -39,13 +45,14 @@ func InitRepository(client *database.DBBundle , cacheService *cache.CacheService
 		Cache:        cacheService,
 		Queries:      db.New(client.SQL),
 		NativePool:   client.PGX,
+		SnowFlake:    snowflakeNode,
 		Cfg:   cfg,
 	}
 
 }
 
 // wrapTx provides a unified interface for QueryRow regardless of driver
-func (s *BlueAdminRepository) execQueryRow(ctx context.Context, tx any, query string, args ...any) rowScanner {
+func (s *{{ .AppName | toPascalCase }}Repository) execQueryRow(ctx context.Context, tx any, query string, args ...any) rowScanner {
 	switch t := tx.(type) {
 	case pgx.Tx:
 		return t.QueryRow(ctx, query, args...)

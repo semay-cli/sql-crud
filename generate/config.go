@@ -20,6 +20,7 @@ func GenerateConfig(data stemplates.Data) {
 	tmplbase64 := stemplates.LoadTemplate("utilsBase64")
 	tmplEmail := stemplates.LoadTemplate("utilsEmail")
 	tmplClient := stemplates.LoadTemplate("utilsClient")
+	tmplSnowFlake := stemplates.LoadTemplate("utilsSnowFlake")
 	tmplCsv := stemplates.LoadTemplate("utilsCsv")
 
 	err = os.MkdirAll("utils", os.ModePerm)
@@ -30,6 +31,7 @@ func GenerateConfig(data stemplates.Data) {
 	stemplates.WriteTemplateToFile("utils/base64.go", tmplbase64, data)
 	stemplates.WriteTemplateToFile("utils/email.go", tmplEmail, data)
 	stemplates.WriteTemplateToFile("utils/apiClient.go", tmplClient, data)
+	stemplates.WriteTemplateToFile("utils/snowflake.go", tmplSnowFlake, data)
 	stemplates.WriteTemplateToFile("utils/csv.go", tmplCsv, data)
 }
 

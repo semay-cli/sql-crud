@@ -130,7 +130,7 @@ func NewFiberApp(cfg *configs.EnvConfig, logger *logs.Logger, appTracer oteltrac
 
 	// Recovery middleware to catch panics
 	app.Use(recover.New())
-	app.Use(FullChainMiddlewareOp(appTracer))
+	app.Use(FullChainMiddleware(appTracer))
 	app.Use(FiberZapLogger(logger))
 
 	// adaptive Rate limiter(tweak your app based on your db pooling and server setting to find you sweet spot)

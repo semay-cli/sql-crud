@@ -3,8 +3,8 @@ package repository
 import (
     "context"
     "os"
-    "testing"
     "strconv"
+    "testing"
 
     "{{ .ProjectName }}/{{ .AppName }}/models"
     "{{ .ProjectName }}/cache"
@@ -12,8 +12,6 @@ import (
     "{{ .ProjectName }}/database"
     "{{ .ProjectName }}/logs"
 )
-
-
 
 func setup{{ .ParentName }}To{{ .FieldName }}TestRepo(t *testing.T) (*{{ .AppName | toPascalCase }}Repository, func()) {
     os.Setenv("{{ .AppName | replaceStringCapitalize }}_DB_TYPE", "sqlite")
@@ -27,10 +25,8 @@ func setup{{ .ParentName }}To{{ .FieldName }}TestRepo(t *testing.T) (*{{ .AppNam
         t.Fatalf("failed to connect to test db: %v", err)
     }
 
-    // Initialize schema for both sides of the relationship
-    // For MtM, Gorm will handle the join table via the model tags
     if err := bundle.Gorm.AutoMigrate(&models.{{ .ParentName }}{}, &models.{{ .FieldName }}{}); err != nil {
-        t.Fatalf("failed to migrate: %v", err)
+        t.Fatalf("failed to migrate schema: %v", err)
     }
 
     cacheSvc, _ := cache.NewCacheService(cfg)
@@ -50,12 +46,27 @@ func Test{{ .AppName | toPascalCase }}Repository_{{ .ParentName }}To{{ .FieldNam
 
     ctx := context.Background()
 
-    // 1. Setup Seed Data - Create Parent
+    // 1️⃣ Create Parent
     parentPost := &models.{{ .ParentName }}Post{
         {{- range .ParentFields }}
         {{- if .Post }}
-        {{- $val := .RandomFieldValue }}
-        {{ .Name }}: {{ if eq .Type "string" }}sPtr({{ $val }}){{ else if eq .Type "bool" }}boolPtr({{ $val }}){{ else if eq .Type "time.Time" }}timePtr(parseTime({{ $val }})){{ else }}&([]{{.Type}}{ {{ $val }} }[0]){{ end }},
+        {{- if eq .Type "string" }}
+        {{ .Name }}: sPtr("{{ randomString }}"),
+        {{- else if eq .Type "bool" }}
+        {{ .Name }}: boolPtr({{ randomBool }}),
+        {{- else if eq .Type "time.Time" }}
+        {{ .Name }}: timePtr(parseTime("{{ randomTime }}")),
+        {{- else if eq .Type "uint" }}
+        {{ .Name }}: uintPtr({{ randomUInt }}),
+        {{- else if eq .Type "uint64" }}
+        {{ .Name }}: uint64Ptr({{ randomUInt }}),
+        {{- else if eq .Type "int64" }}
+        {{ .Name }}: int64Ptr({{ randomUInt }}),
+        {{- else if eq .Type "float64" }}
+        {{ .Name }}: float64Ptr({{ randomFloat }}),
+        {{- else }}
+        {{ .Name }}: nil, // fallback
+        {{- end }}
         {{- end }}
         {{- end }}
     }
@@ -64,12 +75,33 @@ func Test{{ .AppName | toPascalCase }}Repository_{{ .ParentName }}To{{ .FieldNam
         t.Fatalf("failed to create parent {{ .ParentName }}: %v", err)
     }
 
-    // 2. Setup Seed Data - Create Field (Child)
+    // 2️⃣ Create Field / Child
     fieldPost := &models.{{ .FieldName }}Post{
         {{- range .ResponseModel.Fields }}
         {{- if .Post }}
-        {{- $val := .RandomFieldValue }}
-        {{ .Name }}: {{ if eq .Type "string" }}sPtr({{ $val }}){{ else if eq .Type "bool" }}boolPtr({{ $val }}){{ else if eq .Type "time.Time" }}timePtr(parseTime({{ $val }})){{ else }}&([]{{.Type}}{ {{ $val }} }[0]){{ end }},
+        {{- if eq .Type "string" }}
+        {{ .Name }}: sPtr("{{ randomString }}"),
+        {{- else if eq .Type "bool" }}
+        {{ .Name }}: boolPtr({{ randomBool }}),
+        {{- else if eq .Type "time.Time" }}
+        {{ .Name }}: timePtr(parseTime("{{ randomTime }}")),
+        {{- else if .ForeignKeyModel }}
+        {{- if eq .ForeignKeyModel $.ParentName }}
+        {{ .Name }}: uint64Ptr(parentObj.ID),
+        {{- else }}
+        {{ .Name }}: uint64Ptr({{ .RandomFieldValue }}),
+        {{- end }}
+        {{- else if eq .Type "uint" }}
+        {{ .Name }}: uintPtr({{ randomUInt }}),
+        {{- else if eq .Type "uint64" }}
+        {{ .Name }}: uint64Ptr({{ randomUInt }}),
+        {{- else if eq .Type "int64" }}
+        {{ .Name }}: int64Ptr({{ randomUInt }}),
+        {{- else if eq .Type "float64" }}
+        {{ .Name }}: float64Ptr({{ randomFloat }}),
+        {{- else }}
+        {{ .Name }}: nil,
+        {{- end }}
         {{- end }}
         {{- end }}
     }
@@ -81,15 +113,14 @@ func Test{{ .AppName | toPascalCase }}Repository_{{ .ParentName }}To{{ .FieldNam
     pIDStr := strconv.Itoa(int(parentObj.ID))
     fIDStr := strconv.Itoa(int(fieldObj.ID))
 
-    // 3. Test Add Relationship
+    // 3️⃣ Add Relationship
     t.Run("AddRelationship", func(t *testing.T) {
-        err := repo.Add{{ .ParentName }}To{{ .FieldName }}(ctx, pIDStr, fIDStr, nil)
-        if err != nil {
+        if err := repo.Add{{ .ParentName }}To{{ .FieldName }}(ctx, pIDStr, fIDStr, nil); err != nil {
             t.Fatalf("failed to add relationship: %v", err)
         }
     })
 
-    // 4. Test Get Relationship (Paginated)
+    // 4️⃣ Get Relationship
     t.Run("GetRelationships", func(t *testing.T) {
         var results []models.{{ .FieldName }}Get
         pagination := models.Pagination{Page: 1, Size: 10}
@@ -98,23 +129,21 @@ func Test{{ .AppName | toPascalCase }}Repository_{{ .ParentName }}To{{ .FieldNam
             t.Fatalf("failed to get relationships: %v", err)
         }
         if total == 0 {
-            t.Errorf("expected at least 1 relationship, got %d", total)
+            t.Errorf("expected >=1 relationship, got %d", total)
         }
     })
 
-    // 5. Test Get Missing Relationships
+    // 5️⃣ Get Missing
     t.Run("GetMissingRelationships", func(t *testing.T) {
-        var missingResults []models.{{ .FieldName }}Get
-        err := repo.GetAll{{ .FieldName }}s{{ .ParentName | toLowerCaseName }}DoesNotHave(ctx, pIDStr, &missingResults)
-        if err != nil {
+        var missing []models.{{ .FieldName }}Get
+        if err := repo.GetAll{{ .FieldName }}s{{ .ParentName | toLowerCaseName }}DoesNotHave(ctx, pIDStr, &missing); err != nil {
             t.Fatalf("failed to get missing relationships: %v", err)
         }
     })
 
-    // 6. Test Remove Relationship
+    // 6️⃣ Remove Relationship
     t.Run("RemoveRelationship", func(t *testing.T) {
-        err := repo.Remove{{ .ParentName }}From{{ .FieldName }}(ctx, pIDStr, fIDStr, nil)
-        if err != nil {
+        if err := repo.Remove{{ .ParentName }}From{{ .FieldName }}(ctx, pIDStr, fIDStr, nil); err != nil {
             t.Fatalf("failed to remove relationship: %v", err)
         }
     })

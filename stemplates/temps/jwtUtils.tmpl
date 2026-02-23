@@ -2,9 +2,11 @@ package repository
 
 import (
 	"math/rand"
-	"strconv"
 
+	{{- if eq .AuthAppName .CurrentAppName }}
+	"strconv"
 	"{{.ProjectName}}/{{.CurrentAppName}}/models"
+	{{- end }}
 	//"{{.ProjectName}}/configs"
 
 )
@@ -26,6 +28,7 @@ func GenerateRandomString(length int) (string, error) {
 }
 
 
+{{- if eq .AuthAppName .CurrentAppName }}
 
 func (repo *{{ .CurrentAppName | toPascalCase }}Repository) JWTSaltUpdate() {
 	//  getting salt length from configuration file
@@ -103,3 +106,4 @@ func (repo *{{ .CurrentAppName | toPascalCase }}Repository) GetJwtSalt() (salt_a
 	return salt_a, salt_b
 
 }
+{{- end}}

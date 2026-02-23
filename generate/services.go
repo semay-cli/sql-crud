@@ -49,6 +49,16 @@ func GenerateServicesSQLC(data stemplates.Data) {
 	rlnTmplTest := stemplates.LoadTemplate("relationRepository-sqlc-test")
 	tmplSvc := stemplates.LoadTemplate("serviceApp-sqlc")
 	rlnTmplSvc := stemplates.LoadTemplate("relationAppService-sqlc")
+	queryTmpl := stemplates.LoadTemplate("sqlcdb")
+	schemaTmpl := stemplates.LoadTemplate("sqlcschema")
+	// create folder if not exists
+	if err := os.MkdirAll("sqlc", os.ModePerm); err != nil {
+		panic("could not create directory")
+	}
+
+	// stemplates.WriteTemplateToFile("sqlc.yaml", tmpl, data)
+	stemplates.WriteTemplateToFile("sqlc/db.go", queryTmpl, data)
+	stemplates.WriteTemplateToFile("schema.sql", schemaTmpl, data)
 
 	// create folder if not exists
 	if err := os.MkdirAll("repository", os.ModePerm); err != nil {

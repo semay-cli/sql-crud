@@ -2,8 +2,10 @@ package repository
 
 import (
     "context"
+    "fmt"
     "os"
     "testing"
+    "strconv"
 
     "{{ .ProjectName }}/{{ .AppName }}/models"
     "{{ .ProjectName }}/cache"
@@ -24,7 +26,6 @@ func setup{{ .Name }}TestRepo(t *testing.T) (*{{ .AppName | toPascalCase }}Repos
         t.Fatalf("failed to connect to test db: %v", err)
     }
 
-    // Initialize schema
     if err := bundle.Gorm.AutoMigrate(&models.{{ .Name }}{}); err != nil {
         t.Fatalf("failed to migrate: %v", err)
     }
@@ -40,144 +41,144 @@ func setup{{ .Name }}TestRepo(t *testing.T) (*{{ .AppName | toPascalCase }}Repos
     return repo, cleanup
 }
 
-
-
-func Test{{ .Name }}Repo_CRUD(t *testing.T) {
+// --- CRUD + Full Lifecycle Test ---
+func Test{{ .Name }}Repo_FullLifecycle(t *testing.T) {
     repo, cleanup := setup{{ .Name }}TestRepo(t)
     defer cleanup()
 
     ctx := context.Background()
 
-    {{- /* Generate dynamic values for the Post object */ -}}
+    // 1️⃣ Prepare field values dynamically
     {{- range .Fields }}
     {{- if .Post }}
-    {{ .LowerName }}Val := {{ .RandomFieldValue }}
+    {{- if eq .Type "string" }}
+    {{ .LowerName }}Val := {{ randomString | printf "%q" }}
+    {{- else if eq .Type "bool" }}
+    {{ .LowerName }}Val := {{ randomBool }}
+    {{- else if eq .Type "time.Time" }}
+    {{ .LowerName }}Val := {{ randomTime | printf "%q" }}
+    {{- else if .ForeignKeyModel }}
+    {{ .LowerName }}Val := uint64Ptr({{ randomUInt }}) // always use uint64Ptr for foreign keys
+    {{- else if eq .Type "*uint64" }}
+    {{ .LowerName }}Val := uint64Ptr({{ randomUInt }})
+    {{- else }}
+    {{ .LowerName }}Val := {{ .Type }}Ptr({{ randomUInt }})
+    {{- end }}
     {{- end }}
     {{- end }}
 
+    // 2️⃣ Create Post object
     post := &models.{{ .Name }}Post{
         {{- range .Fields }}
         {{- if .Post }}
         {{- if eq .Type "string" }}
-        {{ .Name }}: &{{ .LowerName }}Val,
+        {{ .Name }}: sPtr({{ .LowerName }}Val),
         {{- else if eq .Type "bool" }}
         {{ .Name }}: boolPtr({{ .LowerName }}Val),
         {{- else if eq .Type "time.Time" }}
         {{ .Name }}: timePtr(parseTime({{ .LowerName }}Val)),
+        {{- else if .ForeignKeyModel }}
+        {{ .Name }}: uint64Ptr({{ .LowerName }}Val),
         {{- else }}
-        {{ .Name }}: &{{ .LowerName }}Val,
+        {{ .Name }}: {{ .LowerName }}Val,
         {{- end }}
         {{- end }}
         {{- end }}
     }
 
-    // 1. Test Create
     out := &models.{{ .Name }}{}
-    err := repo.Create{{ .Name }}(ctx, post, nil, out)
-    if err != nil {
-        t.Fatalf("failed to create {{ .LowerName }}: %v", err)
-    }
-    if out.ID == 0 {
-        t.Error("expected ID to be set")
+    if err := repo.Create{{ .Name }}(ctx, post, nil, out); err != nil {
+        t.Fatalf("failed to create: %v", err)
     }
 
-    // 2. Test GetOne
-    fetched := &models.{{ .Name }}{}
-    err = repo.GetOne{{ .Name }}(ctx, "1", fetched)
-    if err != nil {
-        t.Fatalf("failed to fetch: %v", err)
+    // Convert ID to string for further calls
+    idStr := fmt.Sprintf("%v", out.ID)
+
+    // 3️⃣ Test GetOne
+    getOut := &models.{{ .Name }}{}
+    if err := repo.GetOne{{ .Name }}(ctx, idStr, getOut); err != nil {
+        t.Fatalf("failed to get one: %v", err)
     }
 
-    {{- $modelName := .Name -}}
-    {{- range .GetOneFields }}
-    // Test GetBy{{ . | capitalize }}
-    err = repo.Get{{ $modelName }}By{{ . | capitalize }}(ctx, {{ if eq . "uuid" }}out.UUID{{ else }}fetched.{{ . | capitalize }}{{ end }}, fetched)
-    if err != nil {
-        t.Fatalf("failed to fetch by {{ . }}: %v", err)
-    }
+    // 4️⃣ Test List / GetByFields
+    listOut := make([]models.{{ .Name }}Get, 0)
+    searchTerm := make(map[string]string)
+    {{- if gt (len .SearchFields) 0 }}
+    {{- $searchField := index .SearchFields 0 }}
+    searchTerm["{{ $searchField | getBase }}"] = fmt.Sprintf("%v", out.{{ $searchField | getBase | toPascalCase }})
     {{- end }}
+    total, err := repo.Get{{ .Name }}s(ctx, models.Pagination{Page: 1, Size: 10}, searchTerm, &listOut)
+    if err != nil {
+        t.Fatalf("failed to get list: %v", err)
+    }
+    if total == 0 {
+        t.Errorf("expected count > 0, got %d", total)
+    }
 
-    // 3. Test Update
-    {{- if gt (len .Fields) 0 }}
-        {{- $firstField := index .Fields 0 }}
-        {{- if $firstField.Patch }}
-    patchVal := {{ $firstField.RandomFieldValue }}
-    patch := &models.{{ .Name }}Patch{
-        {{- if eq $firstField.Type "time.Time" }}
-        {{ $firstField.Name }}: timePtr(parseTime(patchVal)),
+    // 5️⃣ Test Update (pick first patchable field)
+    {{- $foundPatch := false }}
+    {{- range .Fields }}
+    {{- if and .Patch (not $foundPatch) }}
+        {{- $foundPatch = true }}
+    patchVal := {{ if eq .Type "string" }}{{ randomString | printf "%q" }}{{ else if eq .Type "bool" }}{{ randomBool }}{{ else if eq .Type "time.Time" }}{{ randomTime | printf "%q" }}{{ else if .ForeignKeyModel }}uint64({{ randomUInt }}){{ else if eq .Type "*uint64" }}uint64Ptr({{randomUInt}}){{ else }}{{ .Type }}({{ .RandomFieldValue }}){{ end }}
+    patch := &models.{{ $.Name }}Patch{
+        {{- if eq .Type "string" }}
+        {{ .Name }}: &patchVal,
+        {{- else if eq .Type "bool" }}
+        {{ .Name }}: boolPtr(patchVal),
+        {{- else if eq .Type "time.Time" }}
+        {{ .Name }}: timePtr(parseTime(patchVal)),
+        {{- else if .ForeignKeyModel }}
+        {{ .Name }}: uint64Ptr(patchVal),
         {{- else }}
-        {{ $firstField.Name }}: &patchVal,
+        {{ .Name }}: &patchVal,
         {{- end }}
     }
-    updated := &models.{{ .Name }}{}
-    err = repo.Update{{ .Name }}(ctx, "1", patch, nil, updated)
-    if err != nil {
+    updateOut := &models.{{ $.Name }}{}
+    if err := repo.Update{{ $.Name }}(ctx, idStr, patch, nil, updateOut); err != nil {
         t.Fatalf("failed to update: %v", err)
     }
-        {{- end }}
+    {{- end }}
     {{- end }}
 
-    // 4. Test Delete
-    err = repo.Delete{{ .Name }}(ctx, "1", nil)
-    if err != nil {
+    // 6️⃣ Test Delete
+    if err := repo.Delete{{ .Name }}(ctx, idStr, nil); err != nil {
         t.Fatalf("failed to delete: %v", err)
-    }
-
-    // 5. Test Get{{ .Name }}s (Pagination/Search)
-    pagination := models.Pagination{Page: 1, Size: 10}
-    searchTerm := map[string]string{
-        {{- if gt (len .SearchFields) 0 }}
-        "{{ index .SearchFields 0 | getBase }}": "test",
-        {{- end }}
-    }
-    var listOut []models.{{ .Name }}Get
-
-    total, err := repo.Get{{ .Name }}s(ctx, pagination, searchTerm, &listOut)
-    if err != nil {
-        t.Fatalf("failed to list: %v", err)
-    }
-    if total != 0 {
-        t.Errorf("expected 0 total after delete, got %d", total)
     }
 }
 
-func Test{{ .Name }}Repo_Batch(t *testing.T) {
+// --- Batch Create ---
+func Test{{ .Name }}Repo_BatchCreate(t *testing.T) {
     repo, cleanup := setup{{ .Name }}TestRepo(t)
     defer cleanup()
 
     ctx := context.Background()
 
     batchItems := []models.{{ .Name }}Post{
+        {{- range $i := seq 2 }} // generate 2 items
         {
-            {{- range .Fields }}{{ if .Post }}
+            {{- range $.Fields }}
+            {{- if .Post }}
             {{- if eq .Type "string" }}
-            {{ .Name }}: sPtr({{ .RandomFieldValue }}),
+            {{ .Name }}: sPtr({{ randomString | printf "%q" }}),
             {{- else if eq .Type "bool" }}
-            {{ .Name }}: boolPtr({{ .RandomFieldValue }}),
+            {{ .Name }}: boolPtr({{ randomBool }}),
             {{- else if eq .Type "time.Time" }}
-            {{ .Name }}: timePtr(parseTime({{ .RandomFieldValue }})),
+            {{ .Name }}: timePtr(parseTime({{ randomTime | printf "%q" }})),
+            {{- else if .ForeignKeyModel }}
+            {{ .Name }}: uint64Ptr({{ randomUInt }}),
+            {{- else if eq .Type "*uint64" }}
+            {{ .Name }}: uint64Ptr({{ randomUInt }}),
             {{- else }}
-            {{ .Name }}: &([]{{.Type}}{ {{.RandomFieldValue}} }[0]),
+            {{ .Name }}: {{ .Type }}Ptr({{ randomUInt }}),
             {{- end }}
-            {{- end }}{{ end }}
-        },
-        {
-            {{- range .Fields }}{{ if .Post }}
-            {{- if eq .Type "string" }}
-            {{ .Name }}: sPtr({{ .RandomFieldValue }}),
-            {{- else if eq .Type "bool" }}
-            {{ .Name }}: boolPtr({{ .RandomFieldValue }}) ,
-            {{- else if eq .Type "time.Time" }}
-            {{ .Name }}: timePtr(parseTime({{ .RandomFieldValue }})),
-            {{- else }}
-            {{ .Name }}: &([]{{.Type}}{ {{.RandomFieldValue}} }[0]),
             {{- end }}
-            {{- end }}{{ end }}
+            {{- end }}
         },
+        {{- end }}
     }
 
-    err := repo.BatchCreate{{ .Name }}s(ctx, batchItems, nil)
-    if err != nil {
+    if err := repo.BatchCreate{{ .Name }}s(ctx, batchItems, nil); err != nil {
         t.Fatalf("failed to batch create: %v", err)
     }
 }

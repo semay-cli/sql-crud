@@ -44,6 +44,7 @@ func runServiceCommand(cmd *cobra.Command, args []string) {
 
 	generate.GenerateUtilsApp(stemplates.ProjectSettings)
 	if ormType == "sqlc" {
+		// generate.GenerateServicesSQLC(stemplates.RenderData)
 		generate.GenerateServicesSQLC(stemplates.RenderData)
 	} else {
 		generate.GenerateServices(stemplates.RenderData)

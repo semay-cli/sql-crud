@@ -370,6 +370,24 @@ func makeSlice(n int) []string {
 	return make([]string, 0, n)
 }
 
+func hasPrefix(str, prefix string) bool {
+	return strings.HasPrefix(str, prefix)
+}
+
+// randomFloat returns a random float64 between 0 and 1000
+func randomFloat() float64 {
+	rand.Seed(time.Now().UnixNano())
+	return rand.Float64() * 1000
+}
+
+func seq(n int) []int {
+	result := make([]int, n)
+	for i := 0; i < n; i++ {
+		result[i] = i
+	}
+	return result
+}
+
 var FuncMap = template.FuncMap{
 	"camelToSnake":            CamelToSnake,            // Register CamelToSnake function
 	"add":                     add,                     // Register Add function
@@ -407,6 +425,9 @@ var FuncMap = template.FuncMap{
 	"makeSlice":               makeSlice,               // Register makeSlice function
 	"toCustomPascalCase":      ToCustomPascalCase,      // Register toCustomPascalCase function
 	"firstField":              firstField,
+	"hasPrefix":               hasPrefix,
+	"randomFloat":             randomFloat,
+	"seq":                     seq,
 }
 
 func add(a int, b int) int {

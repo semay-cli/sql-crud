@@ -36,13 +36,13 @@ var (
 {{- range .SearchFields}}
 // @Param {{ . | getBase }} query string false "Search by {{ . | getBase }} optional field string"
 {{- end}}
-// @Success 200 {object} common.ResponsePagination{data=[]models.{{.Name}}Get}
-// @Failure 404 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponsePagination[[]models.{{.Name}}Get]{data=[]models.{{.Name}}Get}
+// @Failure 404 {object} common.ResponseHTTP[any]{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}} [get]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx echo.Context) error {
-	
 
-	
+
+
     //  parsing Query Prameters
 	Page, _ := strconv.Atoi(contx.QueryParam("page"))
 	Limit, _ := strconv.Atoi(contx.QueryParam("size"))
@@ -59,11 +59,11 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx echo.Co
 		return contx.JSON(http.StatusInternalServerError, resp_err)
 	}
 
-	
+
 	// Getting search fields
-	searchTerm := common.GetSearchMap[string]()
+	searchTerm := common.GetSearchMap()
 	defer common.PutSearchMap(searchTerm)
-	
+
 	if err := contx.Bind(&searchTerm); err != nil {
 		resp_err.Message = err.Error()
 		resp_err.Success = false
@@ -87,7 +87,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx echo.Co
 
 
 	// Fetch {{.LowerName}}s from service
-	totalCount, err := ctrl.Svc.Get{{.Name}}s(contx.UserContext(), pagination, searchTerm,itemsPtr)
+	totalCount, err := ctrl.Svc.Get{{.Name}}s(contx.Request().Context(), pagination, searchTerm,itemsPtr)
 	if err != nil {
 		resp_err.Message = err.Error()
 		resp_err.Success = false
@@ -119,11 +119,11 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}s(contx echo.Co
 // @Accept json
 // @Produce json
 // @Param {{.LowerName}}_id path string true "{{.Name}} ID"
-// @Success 200 {object} common.ResponseHTTP{data=models.{{.Name}}Get}
-// @Failure 404 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponseHTTP[[]models.{{.Name}}Get]{data=models.{{.Name}}Get}
+// @Failure 404 {object} common.ResponseHTTP[any]{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [get]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}ByID(contx echo.Context) error {
-	
+
 
    	//  parsing Query Prameters
 	id := contx.Param("{{.LowerName}}_id")
@@ -136,7 +136,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}ByID(contx echo
 	var item models.{{.Name}}
 
     // Fetch {{.LowerName}} from service
-	err := ctrl.Svc.GetOne{{.Name}}(contx.UserContext(), id,&item)
+	err := ctrl.Svc.GetOne{{.Name}}(contx.Request().Context(), id,&item)
 	if err != nil {
 		resp.Message = err.Error()
 		resp.Success = false
@@ -147,10 +147,10 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}ByID(contx echo
 	// 2. Borrow the single UserGet item for the JSON data
 	poolItem := models.{{.Name}}GetItemPool.Get()
 	defer models.{{.Name}}GetItemPool.Put(poolItem)
-	
+
 	// 5. Copy from Stack -> Pooled Item
 	item.CopyTo(poolItem)
-	
+
 	resp.Success = true
 	resp.Message = "Success"
 	resp.Data = poolItem
@@ -166,12 +166,12 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Get{{.Name}}ByID(contx echo
 // @Accept json
 // @Produce json
 // @Param {{.LowerName}} body models.{{.Name}}Post true "Add {{.Name}}"
-// @Success 200 {object} common.ResponseHTTP{data=models.{{.Name}}Post}
-// @Failure 400 {object} common.ResponseHTTP{}
-// @Failure 500 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponseHTTP[[]models.{{.Name}}Post]{data=models.{{.Name}}Post}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
+// @Failure 500 {object} common.ResponseHTTP[any]{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}} [post]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx echo.Context) error {
-	
+
 
 	// Borrow request model from pool
     posted_{{.LowerName}} := models.{{.Name}}PostItemPool.Get()
@@ -192,7 +192,9 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx echo.Co
 	}
 
 	// then validate structure
-	if err := ctrl.Validator.Struct(posted_{{.LowerName}}); err != nil {
+	validator := getValidator()
+	defer putValidator(validator)
+	if err := validator.Struct(posted_{{.LowerName}}); err != nil {
 		resp.Message = err.Error()
 		resp.Success = false
 		resp.Data = nil
@@ -205,7 +207,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx echo.Co
 
 
     // post {{.LowerName}} from service
-	err := ctrl.Svc.Create{{.Name}}(contx.UserContext(), posted_{{.LowerName}},poolItem)
+	err := ctrl.Svc.Create{{.Name}}(contx.Request().Context(), posted_{{.LowerName}},poolItem)
 	if err != nil {
 		resp.Message = err.Error()
 		resp.Success = false
@@ -213,7 +215,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx echo.Co
 		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
-	
+
 	resp.Success = true
 	resp.Message = "Success"
 	resp.Data = poolItem
@@ -229,12 +231,12 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Post{{.Name}}(contx echo.Co
 // @Produce json
 // @Param {{.LowerName}} body models.{{.Name}}Patch true "Patch {{.Name}}"
 // @Param {{.LowerName}}_id path string true "{{.Name}} ID"
-// @Success 200 {object} common.ResponseHTTP{data=models.{{.Name}}Patch}
-// @Failure 400 {object} common.ResponseHTTP{}
-// @Failure 500 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponseHTTP[[]models.{{.Name}}Patch]{data=models.{{.Name}}Patch}
+// @Failure 400 {object} common.ResponseHTTP[any]{}
+// @Failure 500 {object} common.ResponseHTTP[any]{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [patch]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx echo.Context) error {
-	
+
 
 
 	 // Borrow patch model from pool
@@ -246,7 +248,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx echo.C
     // validate path params
 	id:= contx.Param("{{.LowerName}}_id")
 
-	// initalize resp 
+	// initalize resp
 	resp := common.GetResponseHTTP()
 	defer common.PutResponseHTTP(resp)
 
@@ -259,7 +261,9 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx echo.C
 	}
 
     // then validate structure
-	if err := ctrl.Validator.Struct(patch_{{.LowerName}}); err != nil {
+    validator := getValidator()
+	defer putValidator(validator)
+	if err := validator.Struct(patch_{{.LowerName}}); err != nil {
 		resp.Message = err.Error()
 		resp.Success = false
 		resp.Data = nil
@@ -272,7 +276,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx echo.C
 	defer models.{{.Name}}Pool.Put(poolItem)
 
     // patch {{.LowerName}} from service
-	err := ctrl.Svc.Update{{.Name}}(contx.UserContext(), patch_{{.LowerName}},id,poolItem)
+	err := ctrl.Svc.Update{{.Name}}(contx.Request().Context(), patch_{{.LowerName}},id,poolItem)
 	if err != nil {
 		resp.Message = err.Error()
 		resp.Success = false
@@ -281,7 +285,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx echo.C
 	}
 
 
-	
+
 	resp.Success = true
 	resp.Message = "Success"
 	resp.Data = poolItem
@@ -297,12 +301,12 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Patch{{.Name}}(contx echo.C
 // @Accept json
 // @Produce json
 // @Param {{.LowerName}}_id path string true "{{.Name}} ID"
-// @Success 200 {object} common.ResponseHTTP{}
-// @Failure 404 {object} common.ResponseHTTP{}
-// @Failure 503 {object} common.ResponseHTTP{}
+// @Success 200 {object} common.ResponseHTTP[any]{}
+// @Failure 404 {object} common.ResponseHTTP[any]{}
+// @Failure 503 {object} common.ResponseHTTP[any]{}
 // @Router /{{.AppName | replaceString}}/{{.LowerName}}/{{ "{" }}{{.LowerName}}_id{{ "}" }} [delete]
 func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.Name}}(contx echo.Context) error {
-	
+
 
 
 	// validate path params
@@ -313,7 +317,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.Name}}(contx echo.
 	defer common.PutResponseHTTP(resp)
 
     // delete {{.LowerName}} from service
-	err := ctrl.Svc.Delete{{.Name}}(contx.UserContext(), id)
+	err := ctrl.Svc.Delete{{.Name}}(contx.Request().Context(), id)
 	if err != nil {
 		resp.Message = err.Error()
 		resp.Success = false
@@ -321,7 +325,7 @@ func (ctrl *{{ .AppName | toPascalCase }}Controller) Delete{{.Name}}(contx echo.
 		return contx.JSON(http.StatusInternalServerError, resp)
 	}
 
-	
+
 	resp.Success = true
 	resp.Message = "Success"
 	resp.Data = nil
