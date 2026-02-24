@@ -207,10 +207,10 @@ func startMaster(logger *logs.Logger,prefork bool) {
 
 	// Initial Start
    	for range numCPU {
+		spawn()
 		if !prefork {
 			break
 		}
-		spawn()
 	}
 
 	// Correct Signal Handling for Ctrl+C

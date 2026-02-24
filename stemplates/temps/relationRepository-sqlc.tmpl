@@ -76,7 +76,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Remove{{ .ParentName}}From{{.F
         return err
     }
 
-    isPG := s.DB.Dialector.Name() == "postgres" 
+    isPG := s.DB.Dialector.Name() == "postgres"
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
 
@@ -118,27 +118,27 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.ParentName}}{{.FieldName
     if err != nil {
         return 0, fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
     }
-    
+
     isPG := s.DB.Dialector.Name() == "postgres"
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
 
     {{- if .MtM }}
-    qb.Select("{{.FieldName | toInitials}}.*", "count(*) OVER() as total_count").
+    qb.Select({{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} "{{$.FieldName | toInitials}}.{{.Name | toSnakeCase }}", {{- end }}{{- end }}"{{.FieldName | toInitials}}.created_at","{{.FieldName | toInitials}}.updated_at" ,"count(*) OVER() as total_count").
         From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
         JoinArgs("LEFT JOIN {{.TableName }} {{ .TableName | toInitials}} ON {{.FieldName | toInitials}}.id = {{ .TableName | toInitials}}.{{.LowerFieldName}}_id").
         Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID)
     {{- end }}
     {{- if or .OtM .MtO}}
-    qb.Select("{{.FieldName | toInitials}}.*", "count(*) OVER() as total_count").
+    qb.Select({{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} "{{$.FieldName | toInitials}}.{{.Name | toSnakeCase }}", {{- end }}{{- end }}"{{.FieldName | toInitials}}.created_at","{{.FieldName | toInitials}}.updated_at", "count(*) OVER() as total_count").
         From("{{.FieldName | toSnakeCase}}s {{.FieldName | toInitials }}").
         Where("{{.FieldName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID)
     {{- end}}
 
     qb.OrderBy("{{.FieldName | toInitials}}.id ASC").
         Limit(pagination.Size).
-        Offset((pagination.Page - 1) * pagination.Size) 
-    
+        Offset((pagination.Page - 1) * pagination.Size)
+
     query, args, err := qb.ToSql()
     if err != nil {
         return 0, err
@@ -171,7 +171,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.ParentName}}{{.FieldName
         if err != nil { return 0, err }
         defer rows.Close()
         for rows.Next() {
-        
+
             err := rows.Scan(
                 {{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
                 &item.UpdatedAt, &item.CreatedAt, &totalCount,
@@ -184,7 +184,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.ParentName}}{{.FieldName
             item.Reset()
         }
     }
-    
+
     *out = finalitems
     return uint(totalCount), nil
 }
@@ -195,20 +195,20 @@ func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}sFor{{.Par
     if err != nil {
         return fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
     }
-    
+
     isPG := s.DB.Dialector.Name() == "postgres"
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
 
     {{- if .MtM }}
-    qb.Select("{{.FieldName | toInitials}}.*").
+    qb.Select({{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} "{{$.FieldName | toInitials}}.{{.Name | toSnakeCase }}", {{- end }}{{- end }}"{{.FieldName | toInitials}}.{{.FieldName | toInitials}}.created_at","{{.FieldName | toInitials}}.{{.FieldName | toInitials}}.updated_at").
         From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
         Join("JOIN {{.TableName }} {{ .TableName | toInitials}} ON {{.FieldName | toInitials}}.id = {{ .TableName | toInitials}}.{{.LowerFieldName}}_id").
         Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
     {{- end }}
     {{- if or .OtM .MtO}}
-    qb.Select("{{.FieldName | toInitials}}.*").
+    qb.Select({{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} "{{$.FieldName | toInitials}}.{{.Name | toSnakeCase }}", {{- end }}{{- end }}"{{.FieldName | toInitials}}.{{.FieldName | toInitials}}.created_at","{{.FieldName | toInitials}}.{{.FieldName | toInitials}}.updated_at").
         From("{{.FieldName | toSnakeCase}}s {{.FieldName | toInitials }}").
         Where("{{.FieldName | toInitials}}.{{.LowerParentName}}_id = ? ", {{.ParentName | toInitials}}ID).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
@@ -244,7 +244,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}sFor{{.Par
         if err != nil { return err }
         defer rows.Close()
         for rows.Next() {
-            
+
             err := rows.Scan(
                 {{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
                 &item.UpdatedAt, &item.CreatedAt,
@@ -267,20 +267,20 @@ func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}s{{.Parent
     if err != nil {
         return fmt.Errorf("invalid {{.ParentName | toLowerCaseName}} ID: %v", err)
     }
-        
+
     isPG := s.DB.Dialector.Name() == "postgres"
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
 
     {{- if .MtM }}
-    qb.Select("{{.FieldName | toInitials}}.*").
+    qb.Select({{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} "{{$.FieldName | toInitials}}.{{.Name | toSnakeCase }}", {{- end }}{{- end }}"{{.FieldName | toInitials}}.created_at","{{.FieldName | toInitials}}.updated_at").
         From("{{.LowerFieldName}}s {{.FieldName | toInitials }}").
         JoinArgs("LEFT JOIN {{.TableName }} {{ .TableName | toInitials}} ON {{.FieldName | toInitials}}.id = {{ .TableName | toInitials}}.{{.LowerFieldName}}_id AND {{ .TableName | toInitials}}.{{.LowerParentName}}_id = ?", {{.ParentName | toInitials}}ID).
         Where("{{.TableName | toInitials}}.{{.LowerParentName}}_id IS NULL", nil).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
     {{- end }}
     {{- if or .OtM .MtO}}
-    qb.Select("{{.FieldName | toInitials}}.*").
+    qb.Select({{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} "{{$.FieldName | toInitials}}.{{.Name | toSnakeCase }}", {{- end }}{{- end }}"{{.FieldName | toInitials}}.created_at","{{.FieldName | toInitials}}.updated_at").
         From("{{.FieldName | toSnakeCase }}s {{.FieldName | toInitials }}").
         Where("({{.FieldName | toInitials}}.{{.LowerParentName}}_id IS NULL OR {{.FieldName | toInitials}}.{{.LowerParentName}}_id <> ?)", {{.ParentName | toInitials}}ID).
         OrderBy("{{.FieldName | toInitials}}.id ASC")
@@ -301,7 +301,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}s{{.Parent
         if err != nil { return err }
         defer rows.Close()
         for rows.Next() {
-            
+
             err := rows.Scan(
                 {{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
                 &item.UpdatedAt, &item.CreatedAt,
@@ -319,7 +319,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) GetAll{{.FieldName}}s{{.Parent
         if err != nil { return err }
         defer rows.Close()
         for rows.Next() {
-           
+
             err := rows.Scan(
                 {{- range .ResponseModel.Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
                 &item.UpdatedAt, &item.CreatedAt,

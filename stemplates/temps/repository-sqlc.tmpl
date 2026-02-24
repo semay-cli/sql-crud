@@ -44,8 +44,9 @@ func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Co
     isPG := s.DB.Dialector.Name() == "postgres"
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
-    
-    qb.Insert("{{.Name | toSnakeCase }}s").Columns(
+
+    qb.Insert("{{.Name | toSnakeCase }}s").
+        Columns(
         {{- if .SnowFlake }}"id",{{- end }} {{- /* Add ID column if Snowflake */ -}}
         {{- $i := 0 -}}
         {{- range .Fields -}}
@@ -54,7 +55,8 @@ func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Co
                 {{- $i = add $i 1 -}}
             {{- end -}}
         {{- end -}}
-    ).Values(
+    ).
+        Values(
         {{- if .SnowFlake }}newID,{{- end }} {{- /* Add ID value if Snowflake */ -}}
         {{- range .Fields}} {{- if .Post}}
             {{- if eq .Name "Password" }} hashedPassword,
@@ -66,7 +68,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Create{{.Name}}(ctx context.Co
         {{- if eq .Name "UUID" }} {{$.LowerName}}_uuid.String(), {{- end }}
         {{- end }}
     )
-        
+
     qb.SetExpr("created_at", "CURRENT_TIMESTAMP").Suffix("RETURNING *")
     query, args, err := qb.ToSql()
     if err != nil { return err }
@@ -94,8 +96,10 @@ func (s *{{ .AppName | toPascalCase }}Repository) GetOne{{.Name}}(ctx context.Co
     isPG := s.DB.Dialector.Name() == "postgres"
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
-    
-    qb.Select("*").From("{{.Name | toSnakeCase }}s").Where("id = ?", id)
+
+    qb.Select({{- range .Fields}}{{- if ne .DBType "None"}} "{{.Name | toSnakeCase }}", {{- end }}{{- end }}"created_at","updated_at").
+        From("{{.Name | toSnakeCase }}s").
+        Where("id = ?", id)
     query, args, _ := qb.ToSql()
 
     var err error
@@ -131,7 +135,7 @@ func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}By{{ $field | ge
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
 
-    qb.Select("{{$.Name | toInitials}}.*").
+    qb.Select({{- range $.Fields}}{{- if ne .DBType "None"}} "{{$.Name | toInitials}}.{{.Name | toSnakeCase }}", {{- end }}{{- end }}"{{$.Name | toInitials }}.created_at","{{$.Name | toInitials }}.updated_at").
         From("{{$.Name | toSnakeCase }}s {{$.Name | toInitials}}").
         Where("{{$.Name | toInitials}}.{{ $field | getBase }}= ?", {{ $field | toSnakeCase }})
 
@@ -143,7 +147,7 @@ func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}By{{ $field | ge
     // NATIVE POOL BRANCH
     if s.NativePool != nil {
         err = s.NativePool.QueryRow(ctx, query, args...).Scan(
-            {{- range $.Fields}}{{- if .Get }} 
+            {{- range $.Fields}}{{- if .Get }}
             &out.{{.Name}},
             {{- end }}{{- end }}
             &out.UpdatedAt,
@@ -152,14 +156,14 @@ func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}By{{ $field | ge
     } else {
         // FALLBACK BRANCH
         err = s.SQLC.QueryRowContext(ctx, query, args...).Scan(
-            {{- range $.Fields}}{{- if .Get }} 
+            {{- range $.Fields}}{{- if .Get }}
             &out.{{.Name}},
             {{- end }}{{- end }}
             &out.UpdatedAt,
             &out.CreatedAt,
         )
     }
-    
+
     if err != nil {
         return err
     }
@@ -173,13 +177,221 @@ func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}By{{ $field | ge
 }
 {{ end }}{{- end }}
 
-// Get{{.Name}}s returns resources with high-perf native pool branch
-func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]string, out *[]models.{{.Name}}Get) (uint, error) {
-    isPG := s.DB.Dialector.Name() == "postgres" 
+// Get{{.Name}}sByIDs fetches multiple {{.LowerName}} records by IDs
+func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}sByIDs(
+    ctx context.Context,
+    ids []uint,
+    out *[]models.{{.Name}}Get,
+) error {
+
+    if len(ids) == 0 {
+        *out = []models.{{.Name}}Get{}
+        return nil
+    }
+
+    isPG := s.DB.Dialector.Name() == "postgres"
+
+    // 🚀 NATIVE POSTGRES OPTIMIZED PATH
+    if s.NativePool != nil {
+        query := `
+            SELECT
+                {{- range .Fields}}{{- if ne .DBType "None"}} {{.Name | toSnakeCase}}, {{- end }}{{- end }}
+                created_at, updated_at
+            FROM {{.Name | toSnakeCase}}s
+            WHERE id = ANY($1)
+        `
+
+        rows, err := s.NativePool.Query(ctx, query, ids)
+        if err != nil { return err }
+        defer rows.Close()
+
+        items := (*out)[:0]
+        item := models.{{.Name}}GetItemPool.Get()
+	    defer models.{{.Name}}GetItemPool.Put(item)
+
+        for rows.Next() {
+
+            err := rows.Scan(
+                {{- range .Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
+                &item.CreatedAt,
+                &item.UpdatedAt,
+            )
+
+            items = append(items, *item)
+            if err != nil {
+    			item.Reset()
+    			return  err
+    		}
+    		item.Reset()
+        }
+
+        *out = items
+        return rows.Err()
+    }
+
+    // 🧱 FALLBACK PATH
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
-    
-    qb.Select("{{.Name | toInitials}}.id", 
+
+    qb.Select(
+        {{- range .Fields}}{{- if ne .DBType "None"}} "{{.Name | toSnakeCase}}", {{- end }}{{- end }}
+        "created_at","updated_at",
+    ).
+        From("{{.Name | toSnakeCase}}s").
+        Where("id IN (?)", ids)
+
+    query, args, err := qb.ToSql()
+    if err != nil { return err }
+
+    rows, err := s.SQLC.QueryContext(ctx, query, args...)
+    if err != nil { return err }
+    defer rows.Close()
+
+    items := (*out)[:0]
+    item := models.{{.Name}}GetItemPool.Get()
+	defer models.{{.Name}}GetItemPool.Put(item)
+
+    for rows.Next() {
+
+        err := rows.Scan(
+            {{- range .Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
+            &item.CreatedAt,
+            &item.UpdatedAt,
+        )
+
+        items = append(items, *item)
+        if err != nil {
+			item.Reset()
+			return err
+		}
+		item.Reset()
+    }
+
+    *out = items
+    return rows.Err()
+}
+
+{{ if gt (len .GetOneFields) 0 }}
+{{ range $i, $field := .GetOneFields }}
+
+// Get{{$.Name}}sBy{{ $field | getBase | toPascalCase }}s fetches multiple {{$.LowerName}} records by {{ $field | getBase }}
+func (s *{{ $.AppName | toPascalCase }}Repository) Get{{$.Name}}sBy{{ $field | getBase | toPascalCase }}s(
+    ctx context.Context,
+    values []string,
+    out *[]models.{{$.Name}}Get,
+) error {
+
+    if len(values) == 0 {
+        *out = []models.{{$.Name}}Get{}
+        return nil
+    }
+
+    isPG := s.DB.Dialector.Name() == "postgres"
+
+    // =========================
+    // 🚀 NATIVE POSTGRES PATH
+    // =========================
+    if s.NativePool != nil {
+
+        query := `
+            SELECT
+                {{- range $.Fields}}{{- if ne .DBType "None"}}
+                {{.Name | toSnakeCase}},
+                {{- end}}{{- end}}
+                created_at,
+                updated_at
+            FROM {{$.Name | toSnakeCase}}s
+            WHERE {{ $field | getBase }} = ANY($1)
+        `
+
+        rows, err := s.NativePool.Query(ctx, query, values)
+        if err != nil { return err }
+        defer rows.Close()
+
+        items := (*out)[:0]
+        item := models.{{$.Name}}GetItemPool.Get()
+	    defer models.{{$.Name}}GetItemPool.Put(item)
+
+        for rows.Next() {
+
+            err := rows.Scan(
+                {{- range $.Fields}}{{- if ne .DBType "None"}}
+                &item.{{.Name}},
+                {{- end}}{{- end}}
+                &item.CreatedAt,
+                &item.UpdatedAt,
+            )
+            items = append(items, *item)
+            if err != nil {
+    			item.Reset()
+    			return err
+    		}
+    		item.Reset()
+        }
+
+        *out = items
+        return rows.Err()
+    }
+
+    // =========================
+    // 🧱 FALLBACK PATH
+    // =========================
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
+
+    qb.Select(
+        {{- range $.Fields}}{{- if ne .DBType "None"}}
+        "{{.Name | toSnakeCase}}",
+        {{- end}}{{- end}}
+        "created_at",
+        "updated_at",
+    ).
+        From("{{$.Name | toSnakeCase}}s").
+        Where("{{ $field | getBase }} IN (?)", values)
+
+    query, args, err := qb.ToSql()
+    if err != nil { return err }
+
+    rows, err := s.SQLC.QueryContext(ctx, query, args...)
+    if err != nil { return err }
+    defer rows.Close()
+
+    items := (*out)[:0]
+    item := models.{{$.Name}}GetItemPool.Get()
+	defer models.{{$.Name}}GetItemPool.Put(item)
+
+    for rows.Next() {
+
+        err := rows.Scan(
+            {{- range $.Fields}}{{- if ne .DBType "None"}}
+            &item.{{.Name}},
+            {{- end}}{{- end}}
+            &item.CreatedAt,
+            &item.UpdatedAt,
+        )
+        items = append(items, *item)
+        if err != nil {
+			item.Reset()
+			return err
+		}
+		item.Reset()
+    }
+
+    *out = items
+    return rows.Err()
+}
+
+{{ end }}
+{{ end }}
+
+
+// Get{{.Name}}s returns resources with high-perf native pool branch
+func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Context, pagination models.Pagination, searchTerm map[string]string, out *[]models.{{.Name}}Get) (uint, error) {
+    isPG := s.DB.Dialector.Name() == "postgres"
+    qb := querybuilder.GetBuilder(isPG)
+    defer qb.Release()
+
+    qb.Select("{{.Name | toInitials}}.id",
     {{- $i := 0 -}}
     {{- range .Fields -}}
         {{- if and (or .Get (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") -}}
@@ -194,7 +406,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Cont
 
     {{- range $i, $field := $.SearchFields }}
     if val, ok := searchTerm["{{ $field | getBase }}"]; ok && val != "" {
-        {{- if $field | isValid }} 
+        {{- if $field | isValid }}
            qb = qb.Where("{{$.Name | toInitials}}.{{ $field | getBase }}" + likeExpr, val)
         {{- else }}
            qb = qb.Where("{{$.Name | toInitials}}.{{ $field | getBase }} = ?", val)
@@ -218,7 +430,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Get{{.Name}}s(ctx context.Cont
         if err != nil { return 0, err }
         defer rows.Close()
         for rows.Next() {
-            
+
             err := rows.Scan(
                 {{- range .Fields}}{{- if ne .DBType "None"}} &item.{{.Name}}, {{- end }}{{- end }}
                 &totalCount,
@@ -260,7 +472,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Co
     isPG := s.DB.Dialector.Name() == "postgres"
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
-    
+
     qb.Update("{{ .Name | toSnakeCase }}s")
     {{- range .Fields}} {{- if .Patch}}
     if patch_{{$.LowerName}}.{{.Name}} != nil {
@@ -281,7 +493,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Update{{.Name}}(ctx context.Co
         {{- range .Fields}}{{- if ne .DBType "None"}} &out.{{.Name}}, {{- end }}{{- end }}
         &out.UpdatedAt, &out.CreatedAt,
     )
-  
+
     if err == nil { s.Cache.Delete("{{.LowerName}}:" + id) }
     return err
 }
@@ -291,7 +503,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) Delete{{.Name}}(ctx context.Co
     isPG := s.DB.Dialector.Name() == "postgres"
     qb := querybuilder.GetBuilder(isPG)
     defer qb.Release()
-        
+
     qb.Delete("{{.Name | toSnakeCase }}s").Where("id", id)
     query, args, _ := qb.ToSql()
 
@@ -340,7 +552,7 @@ func (s *{{ .AppName | toPascalCase }}Repository) BatchCreate{{.Name}}s(ctx cont
                 p := &posted_{{.LowerName}}s[i]
                 {{ if $break_3 }}u, _ := uuid.NewV7(); uStr := u.String();{{- end }}
                 {{- range .Fields }}{{ if eq .Name "Password" }}hashedPassword, _ := models.HashPassword(*p.Password);{{ end }}{{ end }}
-                
+
                 return []any{
                     {{- if .SnowFlake }} s.SnowFlake.GenerateShort(),{{- end }}
                     {{- range .Fields }}
@@ -374,13 +586,13 @@ func (s *{{ .AppName | toPascalCase }}Repository) BatchCreate{{.Name}}s(ctx cont
     {{ $colCount := 0 -}}
     {{- if .SnowFlake }}{{ $colCount = 1 }}{{ end -}}
     {{- range .Fields -}}{{ if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") }}{{ $colCount = add $colCount 1 }}{{ end }}{{ end -}}
-    
+
     for i := 0; i < count; i++ {
         p := &posted_{{.LowerName}}s[i]
         startIdx := len(flat)
         {{ if $break_3 }}u, _ := uuid.NewV7(); uStr := u.String();{{- end }}
         {{- range .Fields }}{{ if eq .Name "Password" }}hashedPassword, _ := models.HashPassword(*p.Password);{{ end }}{{ end }}
-        
+
         {{- if .SnowFlake }} flat = append(flat, s.SnowFlake.GenerateShort()){{- end }}
         {{- range .Fields }}
             {{- if and (or .Post (eq .Name "Password") (eq .Name "UUID")) (ne .Name "ID") (ne .Name "CreatedAt") }}
